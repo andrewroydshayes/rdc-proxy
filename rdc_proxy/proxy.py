@@ -48,17 +48,22 @@ def check_cloud_reachable():
 
 async def internet_monitor():
     interval = CFG.get("internet_check_interval_s", 30)
+    loop = asyncio.get_running_loop()
     while True:
-        up = check_internet()
+        # Run blocking probes in a thread so we don't stall handle_rdc_connection.
+        up = await loop.run_in_executor(None, check_internet)
         STATE.internet_up = up
         if up:
             if STATE.internet_stable_since is None:
                 STATE.internet_stable_since = time.time()
                 print("[internet] connection detected, starting stability timer", flush=True)
+            cloud_ip = await loop.run_in_executor(None, check_cloud_reachable)
+            STATE.set_cloud_check_result(cloud_ip)
         else:
             if STATE.internet_stable_since is not None:
                 print("[internet] connection lost, resetting stability timer", flush=True)
             STATE.internet_stable_since = None
+            STATE.set_cloud_check_result(None)
         await asyncio.sleep(interval)
 
 

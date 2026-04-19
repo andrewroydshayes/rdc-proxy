@@ -32,6 +32,17 @@
   #conn-strip .on  { color: #3ddc84; }
   #conn-strip .off { color: #e05252; }
 
+  #proxy-explain {
+    font-size: 12px; font-family: 'SF Mono', Consolas, monospace;
+    color: #7a8494; padding: 6px 24px; background: #0f1117;
+    border-bottom: 1px solid #1a1d24;
+  }
+  #proxy-explain .proxy  { color: #3ddc84; }
+  #proxy-explain .local  { color: #dcc43d; }
+  #proxy-explain .wait   { color: #e0a852; }
+  #proxy-explain .error  { color: #e05252; }
+  #proxy-explain .count  { color: #c8cdd6; font-weight: 600; }
+
   .dashboard {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -190,6 +201,8 @@
   &nbsp;&middot;&nbsp; Internet: <span id="inet-status">—</span>
   &nbsp;&middot;&nbsp; Updated: <span id="last-update">—</span>
 </div>
+
+<div id="proxy-explain">Starting…</div>
 
 <div id="view-status">
 <div class="dashboard">
@@ -527,6 +540,12 @@ async function poll() {
       document.getElementById('last-update').textContent = new Date(d.last_update * 1000).toLocaleTimeString();
     }
 
+    // Proxy-explain: a human-readable status line with live countdown.
+    // We stash the latest snapshot so a 1-second ticker can keep the countdown
+    // decrementing smoothly even between /api/status polls.
+    window.__lastSnap = d;
+    renderProxyExplain();
+
     // Power source
     const ps = document.getElementById('power-source');
     const gt = document.getElementById('gen-timer');
@@ -653,6 +672,46 @@ async function poll() {
   }
   setTimeout(poll, POLL_MS);
 }
+
+// Render the human-readable proxy-status line. Uses window.__lastSnap so the
+// 1-second ticker can decrement the countdown even between API polls.
+function renderProxyExplain() {
+  const el = document.getElementById('proxy-explain');
+  if (!el) return;
+  const d = window.__lastSnap;
+  if (!d) { el.textContent = 'Starting…'; return; }
+  const mode = d.proxy_mode || 'startup';
+  // Client-computed countdown from the server-provided stable-since timestamp.
+  let remaining = null;
+  if (d.internet_stable_since && d.stable_threshold_s) {
+    const elapsed = (Date.now() / 1000) - d.internet_stable_since;
+    remaining = Math.max(0, Math.round(d.stable_threshold_s - elapsed));
+  }
+
+  if (mode === 'proxy') {
+    const ip = d.cloud_ip || d.cloud_reachable_ip || '?';
+    el.innerHTML = `<span class="proxy">● PROXY</span> — relaying RDC ↔ cloud <strong>${ip}</strong>`;
+  } else if (mode === 'local') {
+    if (!d.internet_up) {
+      el.innerHTML = `<span class="local">● LOCAL</span> — no internet; serving captured handshake locally`;
+    } else if (!d.cloud_reachable_ip) {
+      el.innerHTML = `<span class="local">● LOCAL</span> — cloud unreachable; serving captured handshake`;
+    } else if (remaining !== null && remaining > 0) {
+      el.innerHTML = `<span class="local">● LOCAL</span> — cloud <strong>${d.cloud_reachable_ip}</strong> online; switching to PROXY in <span class="count">${remaining}s</span>`;
+    } else {
+      el.innerHTML = `<span class="local">● LOCAL</span> — cloud <strong>${d.cloud_reachable_ip}</strong> online; awaiting RDC reconnect for PROXY switchover`;
+    }
+  } else if (mode === 'waiting') {
+    el.innerHTML = `<span class="wait">● WAITING</span> — no handshake captured yet; will promote to PROXY when internet returns`;
+  } else if (mode === 'startup') {
+    el.textContent = 'Starting…';
+  } else {
+    el.textContent = mode;
+  }
+}
+
+// Tick the countdown every second (independent of the 2s API poll).
+setInterval(renderProxyExplain, 1000);
 
 poll();
 </script>

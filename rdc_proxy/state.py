@@ -29,11 +29,21 @@ class GeneratorState:
         self.rdc_connected = False
         self.internet_up = False
         self.internet_stable_since = None
+        # Latest result of a cloud-reachability probe (TCP connect to cloud:5253).
+        # Distinct from cloud_connected — "reachable" means probe succeeded,
+        # "connected" means we have a live relay session right now.
+        self.cloud_reachable_ip = None
+        self.cloud_last_checked_ts = 0.0
         self.gen_started_at = None
         self.oil_check_runtime_start = 0.0
         self.oil_check_warned = False
         self._events = deque(maxlen=50)
         self._side_channels = {}
+
+    def set_cloud_check_result(self, ip_or_none):
+        with self.lock:
+            self.cloud_reachable_ip = ip_or_none
+            self.cloud_last_checked_ts = time.time()
 
     def update(self, name, value):
         with self.lock:
@@ -99,14 +109,25 @@ class GeneratorState:
             oil_runtime_since_check = runtime - self.oil_check_runtime_start
             oil_warn = oil_runtime_since_check >= CFG.get("oil_check_runtime_hours", 24)
 
+            stable_threshold_s = CFG.get("internet_stable_before_proxy_s", 300)
+            seconds_to_stable = None
+            if self.internet_stable_since is not None:
+                elapsed = time.time() - self.internet_stable_since
+                seconds_to_stable = max(0, int(stable_threshold_s - elapsed))
+
             return {
                 "mode": mode,
                 "values": vals,
                 "proxy_mode": self.proxy_mode,
                 "cloud_ip": self.cloud_ip,
                 "cloud_connected": self.cloud_connected,
+                "cloud_reachable_ip": self.cloud_reachable_ip,
+                "cloud_last_checked_ts": self.cloud_last_checked_ts,
                 "rdc_connected": self.rdc_connected,
                 "internet_up": self.internet_up,
+                "internet_stable_since": self.internet_stable_since,
+                "stable_threshold_s": stable_threshold_s,
+                "seconds_to_stable": seconds_to_stable,
                 "gen_started_at": self.gen_started_at.isoformat() if self.gen_started_at else None,
                 "gen_duration_s": gen_duration,
                 "oil_check_warn": oil_warn,
