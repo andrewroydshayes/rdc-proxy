@@ -134,7 +134,7 @@ HANDSHAKE = {"cloud_greeting": None, "rdc_response": None, "config_msg": None}
 
 
 def handshake_path():
-    return os.path.join(CFG.get("config_dir", "/home/andrew/rdc-proxy"), "handshake.json")
+    return os.path.join(CFG.get("config_dir", "/etc/rdc-proxy"), "handshake.json")
 
 
 def load_handshake():

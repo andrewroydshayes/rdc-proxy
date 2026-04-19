@@ -23,7 +23,7 @@ walkthrough. The short version once you're SSH'd into the Pi:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andrewroydshayes/rdc-proxy/main/install/install.sh \
-  | sudo RDC_IP=192.168.4.50 bash
+  | sudo RDC_IP=10.0.0.50 bash
 ```
 
 ## Architecture

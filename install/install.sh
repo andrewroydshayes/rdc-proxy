@@ -2,7 +2,7 @@
 # One-shot installer for rdc-proxy on a Raspberry Pi.
 #
 #   curl -fsSL https://raw.githubusercontent.com/andrewroydshayes/rdc-proxy/main/install/install.sh \
-#     | sudo RDC_IP=192.168.4.50 bash
+#     | sudo RDC_IP=10.0.0.50 bash
 #
 # Idempotent. Prints a green/red report at the end.
 
@@ -13,7 +13,7 @@ REPO_URL=${REPO_URL:-https://github.com/andrewroydshayes/rdc-proxy.git}
 INSTALL_DIR=${INSTALL_DIR:-/opt/rdc-proxy}
 CONFIG_DIR=${CONFIG_DIR:-/etc/rdc-proxy}
 SERVICE_NAME=rdc-proxy
-RDC_IP=${RDC_IP:-192.168.4.50}
+RDC_IP=${RDC_IP:-10.0.0.50}
 PROXY_PORT=${PROXY_PORT:-5253}
 BRANCH=${BRANCH:-}   # empty = pick latest tag; else explicit branch/tag
 

@@ -95,6 +95,21 @@ async def forward_and_tap(src_reader, dst_writer, tap_fn, label=""):
 
 # ── Connection lifecycle / mode dispatch ───────────────────────────────────
 
+def _local_ips():
+    """Best-effort set of this host's own IPs (for detecting non-TPROXY connects)."""
+    ips = {"0.0.0.0", "127.0.0.1", "::1"}
+    try:
+        import socket as _s
+        for info in _s.getaddrinfo(_s.gethostname(), None):
+            ips.add(info[4][0])
+    except Exception:
+        pass
+    return ips
+
+
+_LOCAL_IPS = _local_ips()
+
+
 async def handle_rdc_connection(rdc_reader, rdc_writer):
     peer = rdc_writer.get_extra_info("peername")
     sock = rdc_writer.get_extra_info("socket")
@@ -103,8 +118,8 @@ async def handle_rdc_connection(rdc_reader, rdc_writer):
     if sock:
         try:
             orig_dst = sock.getsockname()
-            if orig_dst[0] in ("0.0.0.0", "127.0.0.1", "192.168.4.43"):
-                orig_dst = None
+            if orig_dst[0] in _LOCAL_IPS:
+                orig_dst = None  # non-TPROXY connect to us directly
         except Exception:
             pass
 

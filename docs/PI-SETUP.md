@@ -43,8 +43,8 @@ Write, eject, done.
 4. Wait 60 seconds for first-boot.
 5. From another machine on the LAN, find the Pi's IP:
    - Easiest: check your router's DHCP client list for the hostname you set.
-   - Or: `arp -a | grep -i pi` / `nmap -sn 192.168.1.0/24`.
-6. SSH in: `ssh <user>@<pi-ip>`  (e.g. `ssh andrew@192.168.1.42`).
+   - Or: `arp -a | grep -i pi` / `nmap -sn 10.0.0.0/24`.
+6. SSH in: `ssh <user>@<pi-ip>`  (e.g. `ssh pi@10.0.0.42`).
 
 Confirm you're in:
 
@@ -58,11 +58,11 @@ Once you're SSH'd into the Pi, run:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andrewroydshayes/rdc-proxy/main/install/install.sh \
-  | sudo RDC_IP=192.168.4.50 bash
+  | sudo RDC_IP=10.0.0.50 bash
 ```
 
 Arguments you may want to override:
-- `RDC_IP=...` — the RDC's static IP on your LAN (usually `192.168.4.50`).
+- `RDC_IP=...` — the RDC's static IP on your LAN (usually `10.0.0.50`).
 - `PROXY_PORT=...` — defaults to 5253.
 - `BRANCH=main` — pin to an explicit branch/tag. Default = latest tag.
 - `REPO_URL=...` — if you forked the repo, point at your fork.

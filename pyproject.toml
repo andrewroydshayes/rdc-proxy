@@ -9,7 +9,7 @@ description = "Transparent TCP proxy for the Kohler RDC2 generator controller â€
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
-authors = [{name = "Andrew Hayes"}]
+authors = [{name = "andrewroydshayes"}]
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",

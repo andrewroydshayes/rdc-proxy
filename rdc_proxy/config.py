@@ -12,7 +12,7 @@ import os
 DEFAULT_CONFIG = {
     "web_port": 80,
     "proxy_port": 5253,
-    "rdc_ip": "192.168.4.50",
+    "rdc_ip": "10.0.0.50",
     "cloud_dns": "devices.kohler.com",
     "cloud_port": 5253,
     "internet_check_interval_s": 30,

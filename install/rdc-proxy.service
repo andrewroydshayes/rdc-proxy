@@ -17,7 +17,7 @@ ExecStartPre=/bin/sh -c 'iptables -t mangle -C PREROUTING -i br0 -s ${RDC_IP} -p
 ExecStartPre=/bin/sh -c '/usr/sbin/ebtables-legacy -t broute -L BROUTING 2>/dev/null | grep -q "ip-src ${RDC_IP}.*ip-dport ${PROXY_PORT}" || /usr/sbin/ebtables-legacy -t broute -A BROUTING -p IPv4 --ip-proto tcp --ip-dport ${PROXY_PORT} --ip-src ${RDC_IP} -j redirect --redirect-target ACCEPT'
 
 Environment="RDC_PROXY_CONFIG_DIR=/etc/rdc-proxy"
-Environment="RDC_IP=192.168.4.50"
+Environment="RDC_IP=10.0.0.50"
 Environment="PROXY_PORT=5253"
 EnvironmentFile=-/etc/rdc-proxy/rdc-proxy.env
 ExecStart=/opt/rdc-proxy/venv/bin/python -m rdc_proxy
