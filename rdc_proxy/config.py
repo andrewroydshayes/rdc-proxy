@@ -18,7 +18,7 @@ DEFAULT_CONFIG = {
     "internet_check_interval_s": 30,
     "internet_stable_before_proxy_s": 300,
     "oil_check_runtime_hours": 24,
-    "config_dir": "/home/andrew/rdc-proxy",
+    "config_dir": "/etc/rdc-proxy",
     "gauges": {
         "battery_v": {"min": 10.0, "max": 16.0, "green": [12.0, 14.0], "yellow": [11.5, 14.5], "unit": "V", "label": "Battery Voltage"},
         "utility_v": {"min": 200, "max": 280, "green": [228, 252], "yellow": [216, 264], "unit": "V", "label": "Utility Voltage"},

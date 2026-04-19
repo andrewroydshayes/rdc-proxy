@@ -1,13 +1,10 @@
-"""Entry point: assembles all the pieces and runs the asyncio loop.
-
-Replaces the if __name__ == '__main__' block of the original monolith.
-"""
+"""Entry point: assembles all the pieces and runs the asyncio loop."""
 
 import asyncio
 import os
 import threading
 
-from rdc_proxy.config import load_config
+from rdc_proxy.config import CFG, load_config
 from rdc_proxy.dashboard import collect_traffic
 from rdc_proxy.plugins import load_plugins
 from rdc_proxy.proxy import internet_monitor, start_server
@@ -16,9 +13,12 @@ from rdc_proxy.web import run_web
 
 
 async def main():
-    config_dir = os.environ.get("RDC_PROXY_CONFIG_DIR", "/home/andrew/rdc-proxy")
+    config_dir = os.environ.get("RDC_PROXY_CONFIG_DIR", "/etc/rdc-proxy")
     config_path = os.path.join(config_dir, "config.json")
     load_config(config_path)
+    # Env-provided config_dir WINS over the file's default. Handshake + other
+    # sidecar files must live in the same dir as the config.
+    CFG["config_dir"] = config_dir
     load_handshake()
 
     web_thread = threading.Thread(target=run_web, daemon=True)
