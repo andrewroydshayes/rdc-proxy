@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RDC Local Proxy — Kohler Generator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d0f14; color: #c8cdd6; font-family: -apple-system, 'Segoe UI', sans-serif; }
+
+  header {
+    background: #161920; padding: 16px 24px;
+    border-bottom: 1px solid #252932;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  header h1 { font-size: 18px; font-weight: 600; }
+
+  #mode-banner {
+    padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 600;
+    letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .mode-standby  { background: #0e2a1a; color: #3ddc84; }
+  .mode-exercise { background: #2a2a0e; color: #dcdc3d; }
+  .mode-running  { background: #2a0e0e; color: #e05252; }
+  .mode-waiting  { background: #1e2028; color: #7a8494; }
+
+  #conn-strip {
+    font-size: 11px; font-family: 'SF Mono', Consolas, monospace;
+    color: #555; padding: 4px 24px; background: #12141a;
+    border-bottom: 1px solid #1a1d24;
+  }
+  #conn-strip .on  { color: #3ddc84; }
+  #conn-strip .off { color: #e05252; }
+
+  .dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px; padding: 20px 24px;
+  }
+
+  .card {
+    background: #161920; border: 1px solid #252932; border-radius: 8px; padding: 16px;
+  }
+  .card h3 {
+    font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.8px;
+    margin-bottom: 12px; font-weight: 600;
+  }
+  .card.full { grid-column: 1 / -1; }
+  .card.highlight { border-color: #e05252; }
+
+  /* ── Linear Gauge ─────────────────────────────────── */
+  .gauge-linear {
+    margin: 8px 0;
+  }
+  .gauge-linear .gauge-label {
+    display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;
+  }
+  .gauge-linear .gauge-label .val {
+    font-family: 'SF Mono', Consolas, monospace; font-weight: 600; font-size: 14px;
+  }
+  .gauge-linear .gauge-label .name { color: #7a8494; }
+  .gauge-linear .gauge-track {
+    position: relative; height: 20px; background: #1a1d24; border-radius: 4px; overflow: hidden;
+  }
+  .gauge-linear .gauge-band {
+    position: absolute; top: 0; height: 100%; opacity: 0.25;
+  }
+  .gauge-linear .gauge-needle {
+    position: absolute; top: 0; width: 3px; height: 100%; background: #fff;
+    border-radius: 2px; transition: left 0.5s ease;
+  }
+  .band-red    { background: #e05252; }
+  .band-yellow { background: #e3a34c; }
+  .band-green  { background: #3ddc84; }
+
+  /* ── Circular Gauge (RPM) ─────────────────────────── */
+  .gauge-circular {
+    text-align: center; padding: 8px 0;
+  }
+  .gauge-circular svg { max-width: 200px; }
+  .gauge-circular .rpm-value {
+    font-family: 'SF Mono', Consolas, monospace; font-size: 28px; font-weight: 700;
+  }
+  .gauge-circular .rpm-label { font-size: 11px; color: #555; text-transform: uppercase; }
+
+  /* ── Number display ───────────────────────────────── */
+  .num-display {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 6px 0; border-bottom: 1px solid #1a1d24;
+  }
+  .num-display:last-child { border-bottom: none; }
+  .num-display .name { color: #7a8494; font-size: 12px; }
+  .num-display .val {
+    font-family: 'SF Mono', Consolas, monospace; font-size: 16px; font-weight: 600;
+  }
+
+  /* ── Oil Warning ──────────────────────────────────── */
+  #oil-warning {
+    background: #2a1a0e; border: 2px solid #e3a34c; border-radius: 8px;
+    padding: 16px; text-align: center; display: none;
+  }
+  #oil-warning.show { display: block; }
+  #oil-warning h3 { color: #e3a34c; font-size: 14px; margin-bottom: 8px; text-transform: none; letter-spacing: 0; }
+  #oil-warning p { color: #c8cdd6; font-size: 13px; margin-bottom: 12px; }
+  #oil-warning button {
+    background: #e3a34c; color: #1a1d24; border: none; border-radius: 5px;
+    padding: 8px 20px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+
+  /* ── Power source indicator ───────────────────────── */
+  .power-source {
+    text-align: center; padding: 12px; font-size: 14px; font-weight: 600;
+    border-radius: 6px; margin-bottom: 12px;
+  }
+  .power-utility  { background: #0e2a1a; color: #3ddc84; }
+  .power-generator { background: #2a0e0e; color: #e05252; }
+
+  /* ── Events ───────────────────────────────────────── */
+  #events { font-size: 12px; font-family: 'SF Mono', Consolas, monospace; line-height: 1.8; color: #7a8494; }
+  .ev-ts { color: #555; margin-right: 8px; }
+
+  .color-green  { color: #3ddc84; }
+  .color-yellow { color: #e3a34c; }
+  .color-red    { color: #e05252; }
+
+  /* ── View Toggle ─────────────────────────────────── */
+  .view-btn {
+    background: #1e2028; color: #7a8494; border: 1px solid #333; border-radius: 5px;
+    padding: 5px 14px; font-size: 12px; cursor: pointer; font-family: 'SF Mono', Consolas, monospace;
+    margin-left: 8px;
+  }
+  .view-btn.active { background: #0e2a1a; color: #3ddc84; border-color: #1a4a2a; }
+  .header-right { display: flex; align-items: center; gap: 8px; }
+
+  /* ── Dashboard View ──────────────────────────────── */
+  #view-dashboard { display: none; }
+  .dash-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 16px; padding: 20px 24px;
+  }
+  .dash-card {
+    background: #161920; border: 1px solid #252932; border-radius: 8px;
+    padding: 16px; display: flex; flex-direction: column;
+  }
+  .dash-card h3 {
+    font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.8px;
+    margin-bottom: 12px; font-weight: 600;
+  }
+  .dash-card.full { grid-column: 1 / -1; }
+  .dash-card.half { grid-column: span 1; }
+  .chart-wrap { position: relative; height: 100%; min-height: 180px; flex: 1; }
+  .dash-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .dash-table th {
+    text-align: left; padding: 6px 8px; color: #555; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .6px; border-bottom: 1px solid #252932;
+  }
+  .dash-table td { padding: 7px 8px; border-bottom: 1px solid #1a1d24; }
+  .dash-table tr:last-child td { border-bottom: none; }
+  .side-eth0 { color: #5b9cf6; }
+  .side-eth1 { color: #f6c75b; }
+  .val-warn { color: #e05252; font-weight: 600; }
+  .val-ok { color: #3ddc84; }
+  #pi-strip {
+    font-size: 12px; font-family: 'SF Mono', Consolas, monospace;
+    color: #555; padding: 4px 24px;
+  }
+  #pi-strip .val { color: #8a94a4; }
+  #pi-strip .warn { color: #e3a34c; font-weight: 600; }
+  #pi-strip .crit { color: #d94b4b; font-weight: 600; }
+  .conf-badge { display:inline-block; padding:1px 6px; border-radius:3px; font-size:10px;
+                font-family:'SF Mono',Consolas,monospace; font-weight:600; }
+  .conf-confirmed { background:#0e2a1a; color:#3ddc84; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kohler Generator</h1>
+  <div class="header-right">
+    <div id="mode-banner" class="mode-waiting">Starting...</div>
+    <button class="view-btn active" id="btn-status" onclick="showView('status')">Status</button>
+    <button class="view-btn" id="btn-dashboard" onclick="showView('dashboard')">Dashboard</button>
+  </div>
+</header>
+
+<div id="conn-strip">
+  Proxy: <span id="proxy-mode">—</span>
+  &nbsp;&middot;&nbsp; Cloud: <span id="cloud-status">—</span>
+  &nbsp;&middot;&nbsp; RDC: <span id="rdc-status">—</span>
+  &nbsp;&middot;&nbsp; Internet: <span id="inet-status">—</span>
+  &nbsp;&middot;&nbsp; Updated: <span id="last-update">—</span>
+</div>
+
+<div id="view-status">
+<div class="dashboard">
+
+  <!-- Power Source -->
+  <div class="card" id="power-card">
+    <div id="power-source" class="power-source power-utility">Home power provided by Utility</div>
+    <div id="gen-timer" style="display:none;">
+      <div class="num-display">
+        <span class="name">Generator started</span>
+        <span class="val" id="gen-started">—</span>
+      </div>
+      <div class="num-display">
+        <span class="name">Duration</span>
+        <span class="val" id="gen-duration">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Utility / Generator Voltage -->
+  <div class="card" id="voltage-card">
+    <h3>Voltage</h3>
+    <div id="gauge-util-v" class="gauge-linear"></div>
+    <div id="gauge-gen-v" class="gauge-linear" style="display:none;"></div>
+  </div>
+
+  <!-- Frequency -->
+  <div class="card" id="freq-card">
+    <h3>Frequency</h3>
+    <div id="num-util-hz" class="num-display">
+      <span class="name">Utility</span>
+      <span class="val" id="util-hz-val">—</span>
+    </div>
+    <div id="num-gen-hz" class="num-display" style="display:none;">
+      <span class="name">Generator</span>
+      <span class="val" id="gen-hz-val">—</span>
+    </div>
+  </div>
+
+  <!-- Battery -->
+  <div class="card">
+    <h3>Battery</h3>
+    <div id="gauge-batt" class="gauge-linear"></div>
+  </div>
+
+  <!-- Temperatures -->
+  <div class="card">
+    <h3>Temperatures</h3>
+    <div id="gauge-ctrl-temp" class="gauge-linear"></div>
+    <div id="gauge-oil-temp" class="gauge-linear"></div>
+  </div>
+
+  <!-- RPM (shown during exercise/running) -->
+  <div class="card" id="rpm-card" style="display:none;">
+    <h3>Engine Speed</h3>
+    <div class="gauge-circular">
+      <svg viewBox="0 0 200 120" id="rpm-svg">
+        <!-- Background arc bands -->
+        <path id="rpm-band-red-lo" d="" fill="none" stroke="#e05252" stroke-width="14" opacity="0.25"/>
+        <path id="rpm-band-yellow-lo" d="" fill="none" stroke="#e3a34c" stroke-width="14" opacity="0.25"/>
+        <path id="rpm-band-green" d="" fill="none" stroke="#3ddc84" stroke-width="14" opacity="0.25"/>
+        <path id="rpm-band-yellow-hi" d="" fill="none" stroke="#e3a34c" stroke-width="14" opacity="0.25"/>
+        <path id="rpm-band-red-hi" d="" fill="none" stroke="#e05252" stroke-width="14" opacity="0.25"/>
+        <!-- Needle -->
+        <line id="rpm-needle" x1="100" y1="105" x2="100" y2="20" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <div class="rpm-value" id="rpm-value">0</div>
+      <div class="rpm-label">RPM</div>
+    </div>
+  </div>
+
+  <!-- Hours -->
+  <div class="card">
+    <h3>Hours</h3>
+    <div class="num-display">
+      <span class="name">Total Operation</span>
+      <span class="val" id="total-op-hours">—</span>
+    </div>
+    <div class="num-display">
+      <span class="name">Total Runtime</span>
+      <span class="val" id="total-rt-hours">—</span>
+    </div>
+    <div class="num-display">
+      <span class="name">Since Maintenance</span>
+      <span class="val" id="maint-hours">—</span>
+    </div>
+  </div>
+
+  <!-- Oil Warning -->
+  <div class="card full" id="oil-warning">
+    <h3>Oil Check Required</h3>
+    <p>The generator has run <span id="oil-runtime">0</span> hours since the last oil check. Check the oil level and condition.</p>
+    <button onclick="resetOilCheck()">Oil Checked — Reset Counter</button>
+  </div>
+
+  <!-- Events -->
+  <div class="card">
+    <h3>Events</h3>
+    <div id="events"><span style="color:#555">Waiting for data...</span></div>
+  </div>
+
+</div>
+</div><!-- /view-status -->
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- Dashboard View -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div id="view-dashboard">
+  <div id="pi-strip">
+    cpu <span class="val" id="d-pi-temp">—</span>
+    &middot; load <span class="val" id="d-pi-load">—</span>
+    &middot; disk <span class="val" id="d-pi-disk">—</span>
+  </div>
+  <div style="padding:8px 24px 0;">
+    <button class="view-btn active" id="btn-rdc-only" onclick="toggleRdcOnly()">RDC to PiBox Only</button>
+  </div>
+  <div class="dash-grid">
+
+    <div class="dash-card"><h3>Packets / sec</h3><div class="chart-wrap"><canvas id="chart-pps"></canvas></div></div>
+    <div class="dash-card"><h3>Throughput (bytes/sec)</h3><div class="chart-wrap"><canvas id="chart-bps"></canvas></div></div>
+    <div class="dash-card"><h3>Avg Packet Size</h3><div class="chart-wrap"><canvas id="chart-pkt"></canvas></div></div>
+    <div class="dash-card"><h3>Errors</h3><div class="chart-wrap"><canvas id="chart-err"></canvas></div></div>
+
+    <div class="dash-card" id="d-errors-card">
+      <h3>Error Counters</h3>
+      <table class="dash-table" style="font-size:11px;">
+        <thead><tr><th>Source</th><th style="text-align:right">RX Err</th><th style="text-align:right">TX Err</th><th style="text-align:right">RX Drop</th><th style="text-align:right">CRC/FCS</th></tr></thead>
+        <tbody>
+          <tr><td class="side-eth1">eth1 (RDC)</td><td style="text-align:right" id="d-e1-rx-err">—</td><td style="text-align:right" id="d-e1-tx-err">—</td><td style="text-align:right" id="d-e1-rx-drop">—</td><td style="text-align:right" id="d-e1-crc">—</td></tr>
+          <tr><td class="side-eth0">eth0 (Switch)</td><td style="text-align:right" id="d-e0-rx-err">—</td><td style="text-align:right" id="d-e0-tx-err">—</td><td style="text-align:right" id="d-e0-rx-drop">—</td><td style="text-align:right" id="d-e0-crc">—</td></tr>
+          <tr style="border-top:1px solid #252932;"><td style="color:#d4a54c">Switch Port 9</td><td style="text-align:right" id="d-sw-rx-err">—</td><td style="text-align:right" id="d-sw-tx-err">—</td><td style="text-align:right" id="d-sw-rx-drop">—</td><td style="text-align:right" id="d-sw-fcs">—</td></tr>
+        </tbody>
+      </table>
+      <div id="d-sw-detail" style="font-size:10px;color:#555;margin-top:8px;font-family:'SF Mono',Consolas,monospace;"></div>
+    </div>
+
+    <div class="dash-card full" id="d-decoded-card">
+      <h3>Decoded Telemetry</h3>
+      <table class="dash-table" id="d-decoded-table">
+        <thead><tr><th>Name</th><th>Wire ID</th><th style="text-align:right">Value</th><th>Units</th></tr></thead>
+        <tbody id="d-decoded-body"><tr><td colspan="4" style="color:#555">Waiting...</td></tr></tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<script src="/static/chart.min.js"></script>
+<script>
+const POLL_MS = 2000;
+
+// ── View Toggle ──────────────────────────────────────────────────────────────
+let currentView = 'status';
+function showView(view) {
+  currentView = view;
+  document.getElementById('view-status').style.display = view === 'status' ? 'block' : 'none';
+  document.getElementById('view-dashboard').style.display = view === 'dashboard' ? 'block' : 'none';
+  document.getElementById('btn-status').className = 'view-btn' + (view === 'status' ? ' active' : '');
+  document.getElementById('btn-dashboard').className = 'view-btn' + (view === 'dashboard' ? ' active' : '');
+  if (view === 'dashboard' && !chartsInitialized) initCharts();
+}
+
+// ── Dashboard Charts (lazy init) ─────────────────────────────────────────────
+let chartsInitialized = false;
+let chartPPS, chartBPS, chartPKT, chartERR;
+const MAX_POINTS = 120;
+
+function mkDataset(label, color) {
+  return { label, borderColor: color, backgroundColor: 'transparent', borderWidth: 1.8, pointRadius: 0, tension: 0, data: [] };
+}
+function mkChart(id, datasets) {
+  return new Chart(document.getElementById(id), {
+    type: 'line', data: { labels: [], datasets },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: '#7a8494', boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#555', maxTicksLimit: 8, font: { size: 10 }, maxRotation: 0 }, grid: { color: '#1a1d24' } },
+        y: { beginAtZero: true, ticks: { color: '#555', font: { size: 10 } }, grid: { color: '#1a1d24' } }
+      }
+    }
+  });
+}
+function initCharts() {
+  chartPPS = mkChart('chart-pps', [mkDataset('eth1 RX','#f6c75b'),mkDataset('eth1 TX','#e0943a'),mkDataset('eth0 RX','#5b9cf6'),mkDataset('eth0 TX','#3d6fbd')]);
+  chartBPS = mkChart('chart-bps', [mkDataset('eth1 RX','#f6c75b'),mkDataset('eth1 TX','#e0943a'),mkDataset('eth0 RX','#5b9cf6'),mkDataset('eth0 TX','#3d6fbd')]);
+  chartPKT = mkChart('chart-pkt', [mkDataset('eth1 avg','#f6c75b'),mkDataset('eth0 avg','#5b9cf6')]);
+  chartERR = mkChart('chart-err', [mkDataset('eth1 RX err','#e05252'),mkDataset('eth1 TX err','#c44040'),mkDataset('eth1 Drop','#e07a52'),mkDataset('eth1 CRC','#e0b052'),mkDataset('eth0 RX err','#a052e0'),mkDataset('eth0 TX err','#7a40c4'),mkDataset('eth0 Drop','#5280e0'),mkDataset('eth0 CRC','#52b0e0')]);
+  chartsInitialized = true;
+  applyRdcFilter();
+}
+function pushPt(chart, label, vals) {
+  chart.data.labels.push(label);
+  if (chart.data.labels.length > MAX_POINTS) chart.data.labels.shift();
+  chart.data.datasets.forEach((ds,i)=>{ ds.data.push(vals[i]||0); if(ds.data.length>MAX_POINTS) ds.data.shift(); });
+  chart.update('none');
+}
+const ETH0_IDX = {pps:[2,3],bps:[2,3],pkt:[1],err:[4,5,6,7]};
+let rdcOnly = true;
+function applyRdcFilter() {
+  if (!chartsInitialized) return;
+  const charts = {pps:chartPPS,bps:chartBPS,pkt:chartPKT,err:chartERR};
+  for (const [k,c] of Object.entries(charts))
+    for (const idx of (ETH0_IDX[k]||[]))
+      if (c.data.datasets[idx]) c.data.datasets[idx].hidden = rdcOnly;
+  Object.values(charts).forEach(c=>c.update('none'));
+  const btn = document.getElementById('btn-rdc-only');
+  btn.className = 'view-btn' + (rdcOnly ? ' active' : '');
+}
+function toggleRdcOnly() { rdcOnly = !rdcOnly; applyRdcFilter(); }
+function setErr(id,v) { const el=document.getElementById(id); if(!el) return; el.textContent=v; el.className=v>0?'val-warn':'val-ok'; }
+function fmt(v) { if(v>=1e6) return (v/1e6).toFixed(1)+'M'; if(v>=1e3) return (v/1e3).toFixed(1)+'K'; return Math.round(v).toString(); }
+
+// ── Gauge rendering ──────────────────────────────────────────────────────────
+
+function renderLinearGauge(containerId, cfg, value) {
+  const el = document.getElementById(containerId);
+  if (!el || !cfg) return;
+  const min = cfg.min || 0, max = cfg.max || 100;
+  const green = cfg.green || [min, max];
+  const yellow = cfg.yellow || [min, max];
+  const pct = v => Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100));
+  const colorClass = (v) => {
+    if (v >= green[0] && v <= green[1]) return 'color-green';
+    if (v >= yellow[0] && v <= yellow[1]) return 'color-yellow';
+    return 'color-red';
+  };
+  const unit = cfg.unit || '';
+  const label = cfg.label || '';
+
+  el.innerHTML = `
+    <div class="gauge-label">
+      <span class="name">${label}</span>
+      <span class="val ${colorClass(value)}">${value != null ? value.toFixed(1) : '—'} ${unit}</span>
+    </div>
+    <div class="gauge-track">
+      <div class="gauge-band band-red" style="left:0%;width:${pct(yellow[0])}%"></div>
+      <div class="gauge-band band-yellow" style="left:${pct(yellow[0])}%;width:${pct(green[0])-pct(yellow[0])}%"></div>
+      <div class="gauge-band band-green" style="left:${pct(green[0])}%;width:${pct(green[1])-pct(green[0])}%"></div>
+      <div class="gauge-band band-yellow" style="left:${pct(green[1])}%;width:${pct(yellow[1])-pct(green[1])}%"></div>
+      <div class="gauge-band band-red" style="left:${pct(yellow[1])}%;width:${100-pct(yellow[1])}%"></div>
+      ${value != null ? `<div class="gauge-needle" style="left:${pct(value)}%"></div>` : ''}
+    </div>`;
+}
+
+function arcPath(cx, cy, r, startAngle, endAngle) {
+  const rad = a => (a - 90) * Math.PI / 180;
+  const x1 = cx + r * Math.cos(rad(startAngle));
+  const y1 = cy + r * Math.sin(rad(startAngle));
+  const x2 = cx + r * Math.cos(rad(endAngle));
+  const y2 = cy + r * Math.sin(rad(endAngle));
+  const large = (endAngle - startAngle > 180) ? 1 : 0;
+  return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
+}
+
+function renderRpmGauge(rpm, cfg) {
+  if (!cfg) return;
+  const min = cfg.min || 0, max = cfg.max || 4500;
+  const green = cfg.green || [3540, 3660];
+  const yellow = cfg.yellow || [3400, 3800];
+  const cx = 100, cy = 105, r = 80;
+  const startA = -120, endA = 120;
+  const valToAngle = v => startA + ((v - min) / (max - min)) * (endA - startA);
+
+  document.getElementById('rpm-band-red-lo').setAttribute('d', arcPath(cx, cy, r, valToAngle(min), valToAngle(yellow[0])));
+  document.getElementById('rpm-band-yellow-lo').setAttribute('d', arcPath(cx, cy, r, valToAngle(yellow[0]), valToAngle(green[0])));
+  document.getElementById('rpm-band-green').setAttribute('d', arcPath(cx, cy, r, valToAngle(green[0]), valToAngle(green[1])));
+  document.getElementById('rpm-band-yellow-hi').setAttribute('d', arcPath(cx, cy, r, valToAngle(green[1]), valToAngle(yellow[1])));
+  document.getElementById('rpm-band-red-hi').setAttribute('d', arcPath(cx, cy, r, valToAngle(yellow[1]), valToAngle(max)));
+
+  const angle = valToAngle(Math.max(min, Math.min(max, rpm)));
+  const radA = (angle - 90) * Math.PI / 180;
+  const nx = cx + (r - 10) * Math.cos(radA);
+  const ny = cy + (r - 10) * Math.sin(radA);
+  const needle = document.getElementById('rpm-needle');
+  needle.setAttribute('x2', nx);
+  needle.setAttribute('y2', ny);
+
+  const colorClass = rpm >= green[0] && rpm <= green[1] ? 'color-green' :
+                     rpm >= yellow[0] && rpm <= yellow[1] ? 'color-yellow' : 'color-red';
+  const valEl = document.getElementById('rpm-value');
+  valEl.textContent = Math.round(rpm);
+  valEl.className = 'rpm-value ' + colorClass;
+}
+
+function colorForHz(hz, cfg) {
+  if (!cfg) return '';
+  const green = cfg.green || [59.5, 60.5];
+  const yellow = cfg.yellow || [59.0, 61.0];
+  if (hz >= green[0] && hz <= green[1]) return 'color-green';
+  if (hz >= yellow[0] && hz <= yellow[1]) return 'color-yellow';
+  return 'color-red';
+}
+
+function fmtDuration(secs) {
+  if (secs == null) return '—';
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = Math.floor(secs % 60);
+  if (h > 0) return `${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
+  if (m > 0) return `${m}m ${String(s).padStart(2,'0')}s`;
+  return `${s}s`;
+}
+
+// ── Polling ──────────────────────────────────────────────────────────────────
+
+async function poll() {
+  try {
+    const resp = await fetch('/api/status');
+    const d = await resp.json();
+    const v = d.values || {};
+    const g = d.gauges || {};
+    const mode = d.mode;
+
+    // Mode banner
+    const banner = document.getElementById('mode-banner');
+    if (mode === 'standby') {
+      banner.className = 'mode-standby'; banner.textContent = 'Standby';
+    } else if (mode === 'exercise') {
+      banner.className = 'mode-exercise'; banner.textContent = 'Exercise';
+    } else if (mode === 'running') {
+      banner.className = 'mode-running'; banner.textContent = 'Generator Running';
+    } else {
+      banner.className = 'mode-waiting'; banner.textContent = d.proxy_mode || 'Starting';
+    }
+
+    // Connection strip
+    document.getElementById('proxy-mode').textContent = d.proxy_mode || '—';
+    const mkStatus = (ok, label) => `<span class="${ok?'on':'off'}">${label || (ok?'connected':'disconnected')}</span>`;
+    document.getElementById('cloud-status').innerHTML = mkStatus(d.cloud_connected, d.cloud_ip || (d.cloud_connected ? 'connected' : 'disconnected'));
+    document.getElementById('rdc-status').innerHTML = mkStatus(d.rdc_connected);
+    document.getElementById('inet-status').innerHTML = mkStatus(d.internet_up);
+    if (d.last_update > 0) {
+      document.getElementById('last-update').textContent = new Date(d.last_update * 1000).toLocaleTimeString();
+    }
+
+    // Power source
+    const ps = document.getElementById('power-source');
+    const gt = document.getElementById('gen-timer');
+    if (mode === 'running') {
+      ps.className = 'power-source power-generator';
+      ps.textContent = 'Home power provided by Generator';
+      gt.style.display = 'block';
+      if (d.gen_started_at) {
+        document.getElementById('gen-started').textContent = new Date(d.gen_started_at).toLocaleTimeString();
+      }
+      document.getElementById('gen-duration').textContent = fmtDuration(d.gen_duration_s);
+    } else if (mode === 'exercise') {
+      ps.className = 'power-source power-generator';
+      ps.textContent = 'Exercise in Progress';
+      gt.style.display = 'none';
+    } else {
+      ps.className = 'power-source power-utility';
+      ps.textContent = 'Home power provided by Utility';
+      gt.style.display = 'none';
+    }
+
+    // Gauges
+    renderLinearGauge('gauge-util-v', g.utility_v, v.utilityVoltageV || 0);
+    renderLinearGauge('gauge-batt', g.battery_v, v.batteryVoltageV || 0);
+    renderLinearGauge('gauge-ctrl-temp', g.controller_temp_f, v.controllerTempF || 0);
+    renderLinearGauge('gauge-oil-temp', g.oil_temp_f, v.oilTempF || 0);
+
+    // Utility Hz
+    const utilHz = v.utilityFrequencyHz || 0;
+    const utilHzEl = document.getElementById('util-hz-val');
+    utilHzEl.textContent = utilHz ? utilHz.toFixed(1) + ' Hz' : '—';
+    utilHzEl.className = 'val ' + colorForHz(utilHz, g.utility_hz);
+
+    // Exercise/Running elements
+    const showEngine = (mode === 'exercise' || mode === 'running');
+    document.getElementById('rpm-card').style.display = showEngine ? 'block' : 'none';
+    document.getElementById('gauge-gen-v').style.display = showEngine ? 'block' : 'none';
+    document.getElementById('num-gen-hz').style.display = showEngine ? 'flex' : 'none';
+
+    if (showEngine) {
+      renderRpmGauge(v.engineSpeedRpm || 0, g.rpm);
+      renderLinearGauge('gauge-gen-v', g.generator_v, v.generatorVoltageV || 0);
+      const genHz = v.engineFrequencyHz || 0;
+      const genHzEl = document.getElementById('gen-hz-val');
+      genHzEl.textContent = genHz ? genHz.toFixed(1) + ' Hz' : '—';
+      genHzEl.className = 'val ' + colorForHz(genHz, g.frequency_hz);
+    }
+
+    // Hours
+    document.getElementById('total-op-hours').textContent = v.totalOperationHours != null ? v.totalOperationHours.toFixed(1) : '—';
+    document.getElementById('total-rt-hours').textContent = v.totalRuntimeHours != null ? v.totalRuntimeHours.toFixed(1) : '—';
+    document.getElementById('maint-hours').textContent = v.maintHoursSinceLast != null ? v.maintHoursSinceLast.toFixed(1) : '—';
+
+    // Oil warning
+    const oilWarn = document.getElementById('oil-warning');
+    if (d.oil_check_warn) {
+      oilWarn.classList.add('show');
+      document.getElementById('oil-runtime').textContent = d.oil_runtime_since_check.toFixed(1);
+    } else {
+      oilWarn.classList.remove('show');
+    }
+
+    // Events
+    const eventsEl = document.getElementById('events');
+    if (d.events && d.events.length > 0) {
+      eventsEl.innerHTML = d.events.map(e => `<div><span class="ev-ts">${e.ts}</span>${e.msg}</div>`).join('');
+    }
+
+    // ── Dashboard view updates ───────────────────────────────────────────
+    if (currentView === 'dashboard') {
+      const dc = d.dash_current || {};
+      const dh = d.dash_history || [];
+
+      // Pi health
+      if (dc.pi) {
+        const t = dc.pi.cpu_temp_c;
+        const tEl = document.getElementById('d-pi-temp');
+        tEl.textContent = t != null ? `${t.toFixed(1)}°C` : '—';
+        tEl.className = 'val' + (t > 80 ? ' crit' : t > 70 ? ' warn' : '');
+        const l = dc.pi.load1;
+        const lEl = document.getElementById('d-pi-load');
+        lEl.textContent = l != null ? `${l.toFixed(2)}` : '—';
+        const df = dc.pi.disk_free_gb, dt2 = dc.pi.disk_total_gb;
+        const dEl = document.getElementById('d-pi-disk');
+        dEl.textContent = df != null ? `${df.toFixed(1)}G/${dt2.toFixed(1)}G` : '—';
+      }
+
+      // Charts
+      if (chartsInitialized && dc.eth0 && dc.eth1) {
+        const e0 = dc.eth0, e1 = dc.eth1;
+        const ts = dc.ts || '';
+        pushPt(chartPPS, ts, [e1.rx_pps,e1.tx_pps,e0.rx_pps,e0.tx_pps]);
+        pushPt(chartBPS, ts, [e1.rx_bps,e1.tx_bps,e0.rx_bps,e0.tx_bps]);
+        pushPt(chartPKT, ts, [e1.avg_pkt_size,e0.avg_pkt_size]);
+        pushPt(chartERR, ts, [e1.rx_errors,e1.tx_errors,e1.rx_dropped,e1.crc_errors,e0.rx_errors,e0.tx_errors,e0.rx_dropped,e0.crc_errors]);
+
+        setErr('d-e1-rx-err',e1.rx_errors); setErr('d-e1-tx-err',e1.tx_errors);
+        setErr('d-e1-rx-drop',e1.rx_dropped); setErr('d-e1-crc',e1.crc_errors);
+        setErr('d-e0-rx-err',e0.rx_errors); setErr('d-e0-tx-err',e0.tx_errors);
+        setErr('d-e0-rx-drop',e0.rx_dropped); setErr('d-e0-crc',e0.crc_errors);
+      }
+
+      // Switch
+      if (dc.switch && dc.switch.ts) {
+        setErr('d-sw-rx-err', dc.switch['RX Total Error (MAC)'] || 0);
+        setErr('d-sw-tx-err', dc.switch['TX Total Error'] || 0);
+        setErr('d-sw-rx-drop', dc.switch['RX Pkt Discard'] || 0);
+        setErr('d-sw-fcs', (dc.switch['RX FCS Error']||0) + (dc.switch['TX FCS Error']||0));
+        const swAge = Math.round(Date.now()/1000 - dc.switch.ts);
+        document.getElementById('d-sw-detail').textContent =
+          `collisions:${dc.switch['TX Total Collision']||0} jabbers:${dc.switch['RX Jabbers Received']||0} age:${swAge}s`;
+      }
+
+      // Decoded telemetry
+      if (d.decoded && d.decoded.length > 0) {
+        document.getElementById('d-decoded-body').innerHTML = d.decoded.map(r =>
+          `<tr><td>${r.name}</td><td style="font-family:monospace;color:#7a8494;font-size:11px">${r.id_hex}</td><td style="text-align:right;font-family:monospace;font-weight:600">${typeof r.value==='number'?(Math.abs(r.value)>1e9?r.value.toExponential(3):r.value.toLocaleString()):r.value}</td><td>${r.units}</td></tr>`
+        ).join('');
+      }
+    }
+
+  } catch (e) {
+    console.error('poll error:', e);
+  }
+  setTimeout(poll, POLL_MS);
+}
+
+poll();
+</script>
+</body>
+</html>

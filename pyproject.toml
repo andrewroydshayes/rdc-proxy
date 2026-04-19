@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rdc-proxy"
+version = "0.1.0"
+description = "Transparent TCP proxy for the Kohler RDC2 generator controller — decodes telemetry, survives Kohler/Rehlko cloud outages."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Andrew Hayes"}]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: System :: Networking",
+]
+dependencies = [
+    "flask>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
+
+[project.scripts]
+rdc-proxy = "rdc_proxy.__main__:cli"
+
+[tool.setuptools]
+packages = ["rdc_proxy"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+rdc_proxy = ["templates/*.html", "static/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
