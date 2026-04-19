@@ -4,22 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rdc-proxy"
-version = "0.1.0"
+version = "0.2.0"
 description = "Transparent TCP proxy for the Kohler RDC2 generator controller — decodes telemetry, survives Kohler/Rehlko cloud outages."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [{name = "andrewroydshayes"}]
+keywords = ["kohler", "rdc", "generator", "rehlko", "tproxy", "tlv"]
 classifiers = [
+    "Development Status :: 4 - Beta",
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: System :: Networking",
+    "Topic :: System :: Hardware",
 ]
 dependencies = [
     "flask>=2.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/andrewroydshayes/rdc-proxy"
+Repository = "https://github.com/andrewroydshayes/rdc-proxy"
+Issues = "https://github.com/andrewroydshayes/rdc-proxy/issues"
 
 [project.optional-dependencies]
 dev = [
