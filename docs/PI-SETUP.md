@@ -58,14 +58,14 @@ Once you're SSH'd into the Pi, run:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andrewroydshayes/rdc-proxy/main/install/install.sh \
-  | sudo GITHUB_OWNER=andrewroydshayes RDC_IP=192.168.4.50 bash
+  | sudo RDC_IP=192.168.4.50 bash
 ```
 
 Arguments you may want to override:
-- `GITHUB_OWNER=<owner>` — if you forked the repo, set your own org/user.
 - `RDC_IP=...` — the RDC's static IP on your LAN (usually `192.168.4.50`).
 - `PROXY_PORT=...` — defaults to 5253.
 - `BRANCH=main` — pin to an explicit branch/tag. Default = latest tag.
+- `REPO_URL=...` — if you forked the repo, point at your fork.
 
 The installer is idempotent. It will:
 

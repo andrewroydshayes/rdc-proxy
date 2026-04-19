@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 # One-shot installer for rdc-proxy on a Raspberry Pi.
 #
-#   curl -fsSL https://raw.githubusercontent.com/<owner>/rdc-proxy/main/install/install.sh \
-#     | sudo GITHUB_OWNER=<owner> RDC_IP=192.168.4.50 bash
+#   curl -fsSL https://raw.githubusercontent.com/andrewroydshayes/rdc-proxy/main/install/install.sh \
+#     | sudo RDC_IP=192.168.4.50 bash
 #
 # Idempotent. Prints a green/red report at the end.
 
 set -euo pipefail
 
 # ── Config ─────────────────────────────────────────────────────────────────
-GITHUB_OWNER=${GITHUB_OWNER:-andrewroydshayes}
-REPO_URL=${REPO_URL:-https://github.com/${GITHUB_OWNER}/rdc-proxy.git}
+REPO_URL=${REPO_URL:-https://github.com/andrewroydshayes/rdc-proxy.git}
 INSTALL_DIR=${INSTALL_DIR:-/opt/rdc-proxy}
 CONFIG_DIR=${CONFIG_DIR:-/etc/rdc-proxy}
 SERVICE_NAME=rdc-proxy
