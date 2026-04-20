@@ -32,10 +32,21 @@ the command line — just follow the steps exactly as written.
 |---|---|
 | **Raspberry Pi 4 Model B** (4 GB RAM or more) | The "brain." Comes in a cardboard box, green circuit board, about the size of a deck of cards. |
 | **microSD card**, 32 GB, Class 10 / A2 rated | The Pi's storage. Labels say things like "SanDisk Extreme 32GB A2." Don't buy the cheapest no-name one — they fail. |
-| **Raspberry Pi 4 official power supply** (USB-C, 5.1 V / 3 A) | Use the official one. Random USB-C phone chargers may cause random reboots. |
+| **Power — pick ONE of the two options below** | See the "How will you power the Pi?" section just under this table. |
+| ↳ Option A: **Raspberry Pi 4 official power supply** (USB-C, 5.1 V / 3 A) | Use the official one. Random USB-C phone chargers may cause random reboots. Picks up power from a wall outlet. |
+| ↳ Option B: **Official Raspberry Pi PoE+ HAT** (for Pi 4) | Powers the Pi over the same Ethernet cable that carries data — no wall brick needed near the Pi. Only works if your switch supports **PoE** or **PoE+** (look for "802.3af" or "802.3at" on the spec sheet). This is the cleaner install if you have it available. |
 | **USB-to-Ethernet adapter** (gigabit, with a chipset like RTL8153 or AX88179) | Adds a **second** Ethernet port. The Pi only has one built in; you need two. Any generic "USB 3.0 Gigabit Ethernet Adapter" on Amazon works. |
-| **3 Ethernet cables** (Cat5e or Cat6) | At least 3 feet long each. You need three: (1) computer-to-LAN for setup, (2) Pi-to-LAN once installed, (3) Pi-to-generator. |
-| **A case for the Pi** *(optional but recommended)* | Protects the board. Many include a small fan. |
+| **3 Ethernet cables** (Cat5e or Cat6) | At least 3 feet long each. You need three: (1) computer-to-LAN for setup, (2) Pi-to-LAN once installed, (3) Pi-to-generator. If you're using the PoE HAT, the LAN cable (cable #2) MUST be plugged into a PoE-capable switch port. |
+| **A case for the Pi** — **get one, don't skip this** | A bare Pi sitting out exposes a live circuit board to dust, cat hair, static, spilled drinks, and accidental bumps. You're installing this near a generator — it needs physical protection. If you chose the **PoE HAT above**, make sure the case is **PoE-HAT-compatible** (the HAT stacks on top of the Pi, so a standard-height case won't close; look for cases labeled "with PoE HAT clearance" or "tall GPIO case"). If you chose the **official power supply**, any standard Pi 4 case works — the official Pi 4 case ($10) or an Argon Neo / Flirc aluminum case are all fine. |
+
+### How will you power the Pi?
+
+Two ways, pick whichever fits your install:
+
+- **Option A — USB-C wall brick (simplest).** Works anywhere there's an outlet. You'll have a small white brick plugged into the wall near the Pi and a USB-C cable running to the Pi.
+- **Option B — PoE HAT (cleanest).** The Pi pulls power from the Ethernet cable itself. No wall brick, no extra cable, nothing plugged in at the Pi other than two Ethernet cables. Requires a **PoE or PoE+ switch port** on the switch end. Many UniFi / Netgear / TP-Link managed switches have PoE ports labeled. If you already have PoE available at the switch, this is the recommended option — it's what the developer of rdc-proxy uses.
+
+**Which option you pick affects nothing about the software install** — the Pi boots, networks, and runs rdc-proxy identically either way. The difference is purely cabling at the Pi end.
 
 ### On your computer
 
@@ -184,10 +195,17 @@ Physically unplug the SD card from your computer.
 ## 5. First boot of the Pi
 
 1. Unbox the Raspberry Pi.
-2. Flip it over. On the bottom is a slot for the microSD card. Slide your SD card in until it clicks (Pi 4) or just pushes all the way in (some models).
-3. Plug one end of an Ethernet cable into the Pi's **built-in** Ethernet port (the one on the edge of the board, **not** a USB adapter yet). Plug the other end into any open port on your home router or switch.
-4. Plug the power supply into the Pi's USB-C port, then plug the power supply into the wall. A **red LED** should light up immediately.
-5. Wait. The first boot takes **60–90 seconds**. During this time a **green LED** will flicker as the Pi initializes. When it goes quiet and the green LED stops flickering for 10+ seconds, the Pi is ready.
+2. If you bought a **PoE HAT**, install it now: line up the 40-pin connector on the bottom of the HAT with the 40-pin GPIO header on top of the Pi, press straight down until seated, then secure with the included standoffs/screws. See the HAT's included instruction sheet for the exact fasteners.
+3. Put the Pi into its **case** now — easier than wrestling with it after cables are attached. Follow the case's instructions.
+4. Flip the Pi over (inside its case). On the bottom/side is a slot for the microSD card. Slide your SD card in until it clicks (Pi 4) or just pushes all the way in (some models).
+5. Plug one end of an Ethernet cable into the Pi's **built-in** Ethernet port (the one on the edge of the board, **not** a USB adapter yet). Plug the other end into any open port on your home router or switch.
+   - **PoE HAT users:** the switch port you plug into **must be PoE-enabled**. This cable is doing double duty — data AND power.
+6. Apply power:
+   - **Power Option A (USB-C brick):** plug the power supply into the Pi's USB-C port, then into the wall.
+   - **Power Option B (PoE HAT):** no separate power step — the Pi starts booting as soon as you plug in the PoE-enabled Ethernet cable from step 5.
+
+   A **red LED** on the Pi should light up immediately.
+7. Wait. The first boot takes **60–90 seconds**. During this time a **green LED** will flicker as the Pi initializes. When it goes quiet and the green LED stops flickering for 10+ seconds, the Pi is ready.
 
 Leave the Pi running. Do NOT plug in the USB-to-Ethernet adapter yet — that
 comes later.
@@ -484,6 +502,7 @@ Pi is truly transparent — Kohler doesn't know it's there.
 - **Red LED on Pi lit but no green flicker?** Power issue — try a different USB-C cable or the official Pi 4 power supply.
 - **Green LED flickered then stopped but Pi is unreachable?** The SD card may have been written incorrectly. Re-do [Section 4](#4-flash-the-sd-card).
 - **Green LED never turned on at all?** SD card not seated properly, or card is bad. Reseat, retry. If still broken, try a different SD card.
+- **PoE HAT users — no LEDs at all?** The switch port may not actually be supplying PoE. Check your switch's management interface to confirm PoE is enabled on that port, and that the port is delivering at least 15 W (802.3af minimum; 802.3at preferred). Try a different PoE port. Also verify the HAT is firmly seated on the GPIO pins — a loose HAT looks like no power.
 
 ### I can ping the Pi but SSH says "Connection refused"
 
