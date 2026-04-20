@@ -8,6 +8,55 @@ the command line — just follow the steps exactly as written.
 
 ---
 
+## Important — please read before starting
+
+> **Use at your own risk.** rdc-proxy is an unofficial, community project —
+> it is not made by, endorsed by, or supported by Kohler or Rehlko. It runs
+> on your hardware, on your network, near your generator. **You are
+> responsible for your install.** If something goes wrong, you're the one
+> fixing it. Generators are expensive, critical equipment; if you're not
+> comfortable tinkering near one, don't.
+>
+> **It should do no harm — but "should" isn't "guaranteed."** The proxy is
+> a passive, read-only observer on the wire: it forwards traffic between
+> your generator and Kohler's cloud without modifying it, and in local mode
+> it replays a handshake your generator has already seen from the real
+> cloud. None of this should upset the generator. But we can't prove a
+> negative — you accept that risk when you install it.
+>
+> **Everything runs locally.** This software does **not** phone home. No
+> telemetry, no analytics, no data leaves your Pi for any server owned by
+> the developer or a third party. The only outbound traffic is (a) your
+> generator's existing connection to Kohler's cloud, which is unchanged,
+> and (b) package downloads from apt and PyPI the first time you run the
+> installer. Everything else — decoding, storage, dashboard — stays on the
+> Pi.
+>
+> **The source is open; read it before running it.** All three packages
+> ([rdc-proxy](https://github.com/andrewroydshayes/rdc-proxy),
+> [rdc-proxy-unifi](https://github.com/andrewroydshayes/rdc-proxy-unifi),
+> [rdc-correlate](https://github.com/andrewroydshayes/rdc-correlate)) are
+> MIT-licensed and public on GitHub. The installer is a ~200-line bash
+> script. If you'd rather not `curl | sudo bash`, clone the repo, read the
+> installer, and run it locally. Good security hygiene regardless of source.
+>
+> **No warranty.** Per the MIT license, the software is provided **"AS IS,"
+> WITHOUT WARRANTY OF ANY KIND**, express or implied — including but not
+> limited to the warranties of merchantability, fitness for a particular
+> purpose, and non-infringement. The authors are not liable for any claim,
+> damages, or other liability arising from the use of this software. If
+> Kohler changes their wire protocol tomorrow, this project could break,
+> and there's no guarantee it will be updated.
+>
+> **Your relationship with Kohler/Rehlko is yours.** Observing the protocol
+> between your own generator and Kohler's cloud sits in a gray area of
+> Kohler's terms of service. The developer's position is that passive,
+> read-only observation of traffic on your own network, on equipment you
+> own, for personal use, is reasonable. If that matters to you, read
+> Kohler's TOS yourself and make your own call.
+
+---
+
 ## Table of contents
 
 1. [What you'll need (parts list)](#1-what-youll-need-parts-list)
