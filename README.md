@@ -16,6 +16,44 @@ local-only dashboard.
 - Serves a dashboard at `http://<pi>/` with engine state, voltages, frequency,
   runtime hours, utility loss events, and interface counters.
 
+## ⚠️ Use at your own risk
+
+This is an **unofficial, community project** — not made, endorsed, or supported
+by Kohler or Rehlko. It runs on your hardware, on your network, near your
+expensive generator. **You are responsible for your install.** The proxy is
+designed to be passive and read-only on the wire, and has done no harm in
+testing on the developer's generator, but we can't guarantee nothing odd will
+happen on yours. If you're not comfortable tinkering near a generator, don't.
+
+**Nothing leaves your Pi.** No telemetry, no analytics, no phone-home. The
+only outbound network traffic is (a) the generator's existing connection to
+Kohler's cloud — which is unchanged — and (b) package downloads from apt and
+PyPI the first time you install. All decoding, storage, and the dashboard stay
+on the Pi.
+
+**The source is open; read it before running it.** MIT-licensed, all three
+packages on GitHub ([rdc-proxy](https://github.com/andrewroydshayes/rdc-proxy),
+[rdc-proxy-unifi](https://github.com/andrewroydshayes/rdc-proxy-unifi),
+[rdc-correlate](https://github.com/andrewroydshayes/rdc-correlate)). The
+installer is a ~200-line bash script. If you'd rather not `curl | sudo bash`,
+clone the repo, read it, run it yourself.
+
+**No warranty.** Per the MIT license, the software is provided **"AS IS,"
+without warranty of any kind**, express or implied — including merchantability,
+fitness for a particular purpose, and non-infringement. The authors are not
+liable for any claim, damages, or other liability arising from use of this
+software. If Kohler changes their wire protocol, this project could break, and
+there is no guarantee it will be updated.
+
+**Your relationship with Kohler/Rehlko is yours.** Observing the protocol
+between your own generator and Kohler's cloud sits in a gray area of Kohler's
+terms of service. The developer's position is that passive, read-only
+observation of traffic on equipment you own, for personal use, is reasonable —
+but read Kohler's TOS yourself and make your own call.
+
+The full "please read before starting" block is also at the top of
+[docs/PI-SETUP.md](docs/PI-SETUP.md#important--please-read-before-starting).
+
 ## Quick start (fresh Raspberry Pi)
 
 See **[docs/PI-SETUP.md](docs/PI-SETUP.md)** for the full flash-to-running
@@ -50,10 +88,13 @@ python -m rdc_proxy
 
 ## Status
 
-Runs in production on a Raspberry Pi 4 monitoring a Kohler 20 kW generator
-(Model20KW, RDC2, firmware 3.4.5). See project memory for the handshake
-reverse-engineering notes and mode-transition validation tests.
+Runs in production on a Raspberry Pi 4 monitoring a Kohler 20 kW RDC2
+generator. See the
+[rdc-protocol-research](https://github.com/andrewroydshayes/rdc-protocol-research)
+repo for handshake reverse-engineering notes and the parameter-mapping
+registry.
 
 ## License
 
-MIT.
+[MIT](LICENSE). Provided "AS IS," without warranty. See the full disclaimer
+in the [Use at your own risk](#️-use-at-your-own-risk) section above.
