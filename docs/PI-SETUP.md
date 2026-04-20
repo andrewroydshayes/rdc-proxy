@@ -172,7 +172,7 @@ You now see a form with tabs: **General**, **Services**, **Options**.
 
 **Switch to the "Options" tab**, and optionally:
 
-- ☑ **Eject media when finished** — convenient so the SD card just pops out.
+- ☑ **Eject media when finished** — this doesn't physically pop the card out; it just unmounts it so it's safe to pull out without corrupting the card. Leave it checked.
 
 Click **SAVE**.
 
@@ -188,7 +188,10 @@ it; don't unplug the card.
 
 When it finishes, a dialog says *"Write Successful"*. Click **CONTINUE**.
 
-Physically unplug the SD card from your computer.
+Now physically remove the SD card: pull it out of the reader (or press-and-release
+if your reader is the spring-loaded kind). If your computer shows a warning
+like "Disk not ejected properly," ignore it — the Imager already safely
+unmounted the card for you.
 
 ---
 
