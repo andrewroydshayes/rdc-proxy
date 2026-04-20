@@ -55,10 +55,6 @@ the command line — just follow the steps exactly as written.
 > with equipment you own. rdc-proxy does **not** use Kohler's cloud API,
 > does **not** access the service in an automated way, and does **not**
 > share account access — it just watches packets fly by on your network.
-> (The separate
-> [rdc-correlate](https://github.com/andrewroydshayes/rdc-correlate) project
-> does automate cloud-API calls using your credentials; that's a genuine
-> TOS question, discussed in its own README.)
 
 ---
 
