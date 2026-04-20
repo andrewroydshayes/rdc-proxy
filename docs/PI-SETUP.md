@@ -48,12 +48,17 @@ the command line — just follow the steps exactly as written.
 > Kohler changes their wire protocol tomorrow, this project could break,
 > and there's no guarantee it will be updated.
 >
-> **Your relationship with Kohler/Rehlko is yours.** Observing the protocol
-> between your own generator and Kohler's cloud sits in a gray area of
-> Kohler's terms of service. The developer's position is that passive,
-> read-only observation of traffic on your own network, on equipment you
-> own, for personal use, is reasonable. If that matters to you, read
-> Kohler's TOS yourself and make your own call.
+> **Observing traffic on your own network is your right.** rdc-proxy is a
+> passive bridge on your LAN between two pieces of hardware you own. Kohler
+> has no legal standing over packets on your wire, and US copyright law
+> (DMCA §1201(f)) explicitly permits reverse engineering for interoperability
+> with equipment you own. rdc-proxy does **not** use Kohler's cloud API,
+> does **not** access the service in an automated way, and does **not**
+> share account access — it just watches packets fly by on your network.
+> (The separate
+> [rdc-correlate](https://github.com/andrewroydshayes/rdc-correlate) project
+> does automate cloud-API calls using your credentials; that's a genuine
+> TOS question, discussed in its own README.)
 
 ---
 

@@ -8,6 +8,36 @@
 
 set -euo pipefail
 
+# ── Disclaimer ─────────────────────────────────────────────────────────────
+# Shown before any action so the user has a chance to abort before `sudo`
+# modifies anything.
+if [[ "${RDC_SKIP_DISCLAIMER:-}" != "1" ]]; then
+cat <<'DISCLAIMER'
+
+  ╔═══════════════════════════════════════════════════════════════════════╗
+  ║  rdc-proxy — unofficial community project                             ║
+  ║                                                                       ║
+  ║  Not made by, endorsed by, or supported by Kohler or Rehlko.          ║
+  ║  Runs on YOUR hardware, YOUR network, near YOUR generator.            ║
+  ║  You are responsible for your install.                                ║
+  ║                                                                       ║
+  ║  • Passive / read-only on the wire — should do no harm.               ║
+  ║  • Nothing phones home. Only outbound traffic: your generator's       ║
+  ║    existing Kohler cloud link, and apt/PyPI package downloads.        ║
+  ║  • MIT licensed "AS IS." No warranty. No liability.                   ║
+  ║  • Source open at https://github.com/andrewroydshayes/rdc-proxy       ║
+  ║                                                                       ║
+  ║  Full disclaimer: README.md on GitHub.                                ║
+  ╚═══════════════════════════════════════════════════════════════════════╝
+
+DISCLAIMER
+for i in 10 9 8 7 6 5 4 3 2 1; do
+  printf "\r  continuing in %2ds — press Ctrl+C to abort..." "$i"
+  sleep 1
+done
+printf "\r%60s\r\n" ""
+fi
+
 # ── Config ─────────────────────────────────────────────────────────────────
 REPO_URL=${REPO_URL:-https://github.com/andrewroydshayes/rdc-proxy.git}
 INSTALL_DIR=${INSTALL_DIR:-/opt/rdc-proxy}
