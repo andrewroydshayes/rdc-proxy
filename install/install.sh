@@ -38,6 +38,15 @@ done
 printf "\r%60s\r\n" ""
 fi
 
+# ── SSH survival ───────────────────────────────────────────────────────────
+# Step 6 puts eth0 into the bridge, which strips its IP. If the user is SSH'd
+# in on eth0, that kills their session. Ignore SIGHUP so we don't die with it,
+# and tee everything to a log file so the output is recoverable after reconnect.
+trap '' HUP
+mkdir -p /var/log
+exec > >(tee -a /var/log/rdc-proxy-install.log) 2>&1
+echo "=== rdc-proxy install: $(date -Iseconds) ==="
+
 # ── Config ─────────────────────────────────────────────────────────────────
 REPO_URL=${REPO_URL:-https://github.com/andrewroydshayes/rdc-proxy.git}
 INSTALL_DIR=${INSTALL_DIR:-/opt/rdc-proxy}
@@ -175,6 +184,55 @@ else
 fi
 
 # ── Bridge ─────────────────────────────────────────────────────────────────
+# Heads-up: if the user is SSH'd in on an interface that's about to become a
+# bridge member, their session will die (bridge members lose their own IPs).
+# Only warn when that's actually the case — wifi/other-iface SSH is fine.
+BRIDGE_MEMBERS=${MEMBERS:-eth0 eth1}
+SSH_DYING_IFACE=""
+SSH_DYING_IP=""
+if [[ -n "${SSH_CONNECTION:-}" ]]; then
+  SSH_SERVER_IP=$(echo "$SSH_CONNECTION" | awk '{print $3}')
+  for iface in $BRIDGE_MEMBERS; do
+    IFACE_IP=$(ip -4 -o addr show dev "$iface" 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
+    if [[ -n "$IFACE_IP" && "$SSH_SERVER_IP" == "$IFACE_IP" ]]; then
+      SSH_DYING_IFACE="$iface"
+      SSH_DYING_IP="$IFACE_IP"
+      break
+    fi
+  done
+fi
+
+if [[ -n "$SSH_DYING_IFACE" ]]; then
+  HOSTNAME_SHORT=$(hostname)
+  cat <<WARN
+
+${Y}╔═══════════════════════════════════════════════════════════════════════╗${N}
+${Y}║  HEADS UP — YOUR SSH SESSION IS ABOUT TO DROP                         ║${N}
+${Y}╠═══════════════════════════════════════════════════════════════════════╣${N}
+  You're SSH'd in on ${SSH_DYING_IFACE} (${SSH_DYING_IP}).
+  The next step moves ${SSH_DYING_IFACE} into a bridge, which strips its IP.
+  Your SSH session will die within a few seconds. This is expected,
+  not a failure.
+
+  The install keeps running in the background. When SSH drops:
+
+    1. reconnect via wifi, or: ${G}ssh pi@${HOSTNAME_SHORT}.local${N}
+    2. dashboard:              ${G}http://${HOSTNAME_SHORT}.local/${N}
+    3. full install log:       ${G}sudo cat /var/log/rdc-proxy-install.log${N}
+    4. service status:         ${G}systemctl status rdc-proxy${N}
+
+  If anything looks off, re-run the installer — it's idempotent.
+
+${Y}╚═══════════════════════════════════════════════════════════════════════╝${N}
+
+WARN
+  for i in 10 9 8 7 6 5 4 3 2 1; do
+    printf "\r  bridge setup in %2ds — Ctrl+C to abort..." "$i"
+    sleep 1
+  done
+  printf "\r%60s\r\n" ""
+fi
+
 step "6/8  bridge (br0 over eth0+eth1)"
 if ip link show br0 >/dev/null 2>&1; then
   ok "br0 already exists"

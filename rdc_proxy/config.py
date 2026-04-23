@@ -65,3 +65,14 @@ def load_config(path):
             json.dump(DEFAULT_CONFIG, f, indent=2)
         print(f"[config] generated defaults at {path}", flush=True)
     return CFG
+
+
+def save_config():
+    """Persist the live CFG back to CONFIG_FILE. In-memory updates to CFG
+    take effect on the next proxy loop iteration without a service restart."""
+    if not CONFIG_FILE:
+        raise RuntimeError("save_config called before load_config")
+    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(CFG, f, indent=2)
+    print(f"[config] saved to {CONFIG_FILE}", flush=True)
