@@ -5,18 +5,106 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RDC Local Proxy — Kohler Generator</title>
 <style>
+  /* ── Theme palettes ─────────────────────────────────────────────── */
+  :root {
+    /* Surfaces */
+    --bg-body: #0d0f14;
+    --bg-panel: #161920;
+    --bg-strip: #12141a;
+    --bg-strip-alt: #0f1117;
+    --bg-input: #0d0f14;
+    --bg-track: #1a1d24;
+
+    /* Text */
+    --text: #c8cdd6;
+    --text-muted: #7a8494;
+    --text-dim: #555;
+    --text-soft: #8a94a4;
+
+    /* Borders */
+    --border: #252932;
+    --border-strong: #333;
+    --border-faint: #1a1d24;
+    --border-accent: #1a4a2a;
+
+    /* Chip backgrounds (tinted tiles behind semantic text) */
+    --chip-neutral-bg: #1e2028;
+    --chip-green-bg:   #0e2a1a;
+    --chip-red-bg:     #2a0e0e;
+    --chip-yellow-bg:  #2a2a0e;
+    --chip-amber-bg:   #2a1a0e;
+
+    /* Semantic text — swapped darker in light mode for contrast */
+    --color-green:       #3ddc84;
+    --color-red:         #e05252;
+    --color-red-bright:  #d94b4b;
+    --color-yellow:      #dcdc3d;
+    --color-amber:       #e3a34c;
+    --color-amber-alt:   #e0a852;
+    --color-blue:        #5b9cf6;
+    --color-gold:        #dcc43d;
+    --color-gold-bright: #f6c75b;
+
+    /* Gauge band colors — kept vivid in both themes so bars read */
+    --band-green:  #3ddc84;
+    --band-yellow: #e3a34c;
+    --band-red:    #e05252;
+
+    /* Misc */
+    --needle: #fff;
+    --modal-backdrop: rgba(0, 0, 0, 0.6);
+  }
+
+  [data-theme="light"] {
+    --bg-body: #f5f7fa;
+    --bg-panel: #ffffff;
+    --bg-strip: #eceff3;
+    --bg-strip-alt: #f0f2f6;
+    --bg-input: #ffffff;
+    --bg-track: #e3e7ec;
+
+    --text: #1f2530;
+    --text-muted: #5a6472;
+    --text-dim: #9aa3ae;
+    --text-soft: #4e5663;
+
+    --border: #d8dde4;
+    --border-strong: #c3c9d2;
+    --border-faint: #e3e7ec;
+    --border-accent: #a2d9b8;
+
+    --chip-neutral-bg: #e8ecf1;
+    --chip-green-bg:   #d9f2e3;
+    --chip-red-bg:     #faddd9;
+    --chip-yellow-bg:  #f5efcb;
+    --chip-amber-bg:   #f9e0c4;
+
+    --color-green:       #1b7f47;
+    --color-red:         #b93434;
+    --color-red-bright:  #a82c2c;
+    --color-yellow:      #7a6a12;
+    --color-amber:       #a16b1b;
+    --color-amber-alt:   #9c6f16;
+    --color-blue:        #2563c7;
+    --color-gold:        #8a7018;
+    --color-gold-bright: #a1831f;
+
+    --needle: #1f2530;
+    --modal-backdrop: rgba(30, 40, 60, 0.35);
+  }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #0d0f14; color: #c8cdd6; font-family: -apple-system, 'Segoe UI', sans-serif; }
+  body { background: var(--bg-body); color: var(--text); font-family: -apple-system, 'Segoe UI', sans-serif; }
 
   header {
-    background: #161920; padding: 16px 24px;
-    border-bottom: 1px solid #252932;
+    background: var(--bg-panel); padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
     display: flex; justify-content: space-between; align-items: center;
     gap: 16px; flex-wrap: wrap;
   }
   header h1 { font-size: 18px; font-weight: 600; }
   header h1 .ident {
-    font-weight: 400; color: #7a8494; margin-left: 10px;
+    font-weight: 400; color: var(--text-muted); margin-left: 10px;
   }
 
   .header-left  { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
@@ -27,7 +115,7 @@
     display: inline-flex; align-items: center; gap: 10px;
   }
   .gen-state-inline .label {
-    font-size: 11px; color: #7a8494; text-transform: uppercase; letter-spacing: 1.2px;
+    font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.2px;
   }
   #gen-state-pill {
     padding: 5px 14px; border-radius: 6px; font-size: 13px; font-weight: 700;
@@ -36,30 +124,30 @@
 
   #conn-strip {
     font-size: 11px; font-family: 'SF Mono', Consolas, monospace;
-    color: #555; padding: 4px 24px; background: #12141a;
-    border-bottom: 1px solid #1a1d24;
+    color: var(--text-dim); padding: 4px 24px; background: var(--bg-strip);
+    border-bottom: 1px solid var(--border-faint);
     display: flex; justify-content: space-between; align-items: center;
   }
-  #conn-strip .on  { color: #3ddc84; }
-  #conn-strip .off { color: #e05252; }
-  #conn-strip .warn { color: #e3a34c; }
-  #conn-strip .version { color: #7a8494; font-weight: 600; }
+  #conn-strip .on  { color: var(--color-green); }
+  #conn-strip .off { color: var(--color-red); }
+  #conn-strip .warn { color: var(--color-amber); }
+  #conn-strip .version { color: var(--text-muted); font-weight: 600; }
 
   #proxy-explain {
     font-size: 12px; font-family: 'SF Mono', Consolas, monospace;
-    color: #7a8494; padding: 6px 24px; background: #0f1117;
-    border-bottom: 1px solid #1a1d24;
+    color: var(--text-muted); padding: 6px 24px; background: var(--bg-strip-alt);
+    border-bottom: 1px solid var(--border-faint);
   }
-  #proxy-explain .proxy  { color: #3ddc84; }
-  #proxy-explain .local  { color: #dcc43d; }
-  #proxy-explain .wait   { color: #e0a852; }
-  #proxy-explain .error  { color: #e05252; }
-  #proxy-explain .count  { color: #c8cdd6; font-weight: 600; }
+  #proxy-explain .proxy  { color: var(--color-green); }
+  #proxy-explain .local  { color: var(--color-gold); }
+  #proxy-explain .wait   { color: var(--color-amber-alt); }
+  #proxy-explain .error  { color: var(--color-red); }
+  #proxy-explain .count  { color: var(--text); font-weight: 600; }
 
-  .mode-standby  { background: #0e2a1a; color: #3ddc84; }
-  .mode-exercise { background: #2a2a0e; color: #dcdc3d; }
-  .mode-running  { background: #2a0e0e; color: #e05252; }
-  .mode-waiting  { background: #1e2028; color: #7a8494; }
+  .mode-standby  { background: var(--chip-green-bg);  color: var(--color-green); }
+  .mode-exercise { background: var(--chip-yellow-bg); color: var(--color-yellow); }
+  .mode-running  { background: var(--chip-red-bg);    color: var(--color-red); }
+  .mode-waiting  { background: var(--chip-neutral-bg); color: var(--text-muted); }
 
   .dashboard {
     display: grid;
@@ -68,14 +156,14 @@
   }
 
   .card {
-    background: #161920; border: 1px solid #252932; border-radius: 8px; padding: 16px;
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px;
   }
   .card h3 {
-    font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.8px;
+    font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px;
     margin-bottom: 12px; font-weight: 600;
   }
   .card.full { grid-column: 1 / -1; }
-  .card.highlight { border-color: #e05252; }
+  .card.highlight { border-color: var(--color-red); }
 
   /* ── Linear Gauge ─────────────────────────────────── */
   .gauge-linear {
@@ -87,20 +175,23 @@
   .gauge-linear .gauge-label .val {
     font-family: 'SF Mono', Consolas, monospace; font-weight: 600; font-size: 14px;
   }
-  .gauge-linear .gauge-label .name { color: #7a8494; }
+  .gauge-linear .gauge-label .name { color: var(--text-muted); }
   .gauge-linear .gauge-track {
-    position: relative; height: 20px; background: #1a1d24; border-radius: 4px; overflow: hidden;
+    position: relative; height: 20px; background: var(--bg-track); border-radius: 4px; overflow: hidden;
   }
   .gauge-linear .gauge-band {
     position: absolute; top: 0; height: 100%; opacity: 0.25;
   }
   .gauge-linear .gauge-needle {
-    position: absolute; top: 0; width: 3px; height: 100%; background: #fff;
+    position: absolute; top: 0; width: 3px; height: 100%; background: var(--needle);
     border-radius: 2px; transition: left 0.5s ease;
   }
-  .band-red    { background: #e05252; }
-  .band-yellow { background: #e3a34c; }
-  .band-green  { background: #3ddc84; }
+  .band-red    { background: var(--band-red); }
+  .band-yellow { background: var(--band-yellow); }
+  .band-green  { background: var(--band-green); }
+
+  /* SVG needle — overrides inline stroke="#fff" for light/dark */
+  #rpm-needle { stroke: var(--needle); }
 
   /* ── Circular Gauge (RPM) ─────────────────────────── */
   .gauge-circular {
@@ -110,29 +201,29 @@
   .gauge-circular .rpm-value {
     font-family: 'SF Mono', Consolas, monospace; font-size: 28px; font-weight: 700;
   }
-  .gauge-circular .rpm-label { font-size: 11px; color: #555; text-transform: uppercase; }
+  .gauge-circular .rpm-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; }
 
   /* ── Number display ───────────────────────────────── */
   .num-display {
     display: flex; justify-content: space-between; align-items: baseline;
-    padding: 6px 0; border-bottom: 1px solid #1a1d24;
+    padding: 6px 0; border-bottom: 1px solid var(--border-faint);
   }
   .num-display:last-child { border-bottom: none; }
-  .num-display .name { color: #7a8494; font-size: 12px; }
+  .num-display .name { color: var(--text-muted); font-size: 12px; }
   .num-display .val {
     font-family: 'SF Mono', Consolas, monospace; font-size: 16px; font-weight: 600;
   }
 
   /* ── Oil Warning ──────────────────────────────────── */
   #oil-warning {
-    background: #2a1a0e; border: 2px solid #e3a34c; border-radius: 8px;
+    background: var(--chip-amber-bg); border: 2px solid var(--color-amber); border-radius: 8px;
     padding: 16px; text-align: center; display: none;
   }
   #oil-warning.show { display: block; }
-  #oil-warning h3 { color: #e3a34c; font-size: 14px; margin-bottom: 8px; text-transform: none; letter-spacing: 0; }
-  #oil-warning p { color: #c8cdd6; font-size: 13px; margin-bottom: 12px; }
+  #oil-warning h3 { color: var(--color-amber); font-size: 14px; margin-bottom: 8px; text-transform: none; letter-spacing: 0; }
+  #oil-warning p { color: var(--text); font-size: 13px; margin-bottom: 12px; }
   #oil-warning button {
-    background: #e3a34c; color: #1a1d24; border: none; border-radius: 5px;
+    background: var(--color-amber); color: var(--bg-body); border: none; border-radius: 5px;
     padding: 8px 20px; font-size: 13px; font-weight: 600; cursor: pointer;
   }
 
@@ -141,32 +232,32 @@
     text-align: center; padding: 12px; font-size: 14px; font-weight: 600;
     border-radius: 6px; margin-bottom: 12px;
   }
-  .power-utility  { background: #0e2a1a; color: #3ddc84; }
-  .power-generator { background: #2a0e0e; color: #e05252; }
+  .power-utility   { background: var(--chip-green-bg); color: var(--color-green); }
+  .power-generator { background: var(--chip-red-bg);   color: var(--color-red); }
 
   /* ── Events ───────────────────────────────────────── */
-  #events { font-size: 12px; font-family: 'SF Mono', Consolas, monospace; line-height: 1.8; color: #7a8494; }
-  .ev-ts { color: #555; margin-right: 8px; }
-  .ev-empty { color: #555; font-style: italic; }
+  #events { font-size: 12px; font-family: 'SF Mono', Consolas, monospace; line-height: 1.8; color: var(--text-muted); }
+  .ev-ts { color: var(--text-dim); margin-right: 8px; }
+  .ev-empty { color: var(--text-dim); font-style: italic; }
 
-  .color-green  { color: #3ddc84; }
-  .color-yellow { color: #e3a34c; }
-  .color-red    { color: #e05252; }
+  .color-green  { color: var(--color-green); }
+  .color-yellow { color: var(--color-amber); }
+  .color-red    { color: var(--color-red); }
 
   /* ── View Toggle & Gear ──────────────────────────── */
   .view-btn {
-    background: #1e2028; color: #7a8494; border: 1px solid #333; border-radius: 5px;
+    background: var(--chip-neutral-bg); color: var(--text-muted); border: 1px solid var(--border-strong); border-radius: 5px;
     padding: 5px 14px; font-size: 12px; cursor: pointer; font-family: 'SF Mono', Consolas, monospace;
   }
-  .view-btn.active { background: #0e2a1a; color: #3ddc84; border-color: #1a4a2a; }
+  .view-btn.active { background: var(--chip-green-bg); color: var(--color-green); border-color: var(--border-accent); }
 
   .gear-btn {
-    background: transparent; border: 1px solid #333; color: #7a8494;
+    background: transparent; border: 1px solid var(--border-strong); color: var(--text-muted);
     width: 32px; height: 32px; border-radius: 6px; cursor: pointer;
     font-size: 16px; line-height: 1; display: inline-flex; align-items: center; justify-content: center;
     transition: color 0.2s, border-color 0.2s;
   }
-  .gear-btn:hover { color: #c8cdd6; border-color: #555; }
+  .gear-btn:hover { color: var(--text); border-color: var(--text-dim); }
 
   /* ── Per-gauge strip chart canvas ─────────────────── */
   .gauge-chart {
@@ -176,43 +267,100 @@
 
   /* ── Settings modal ──────────────────────────────── */
   #settings-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    position: fixed; inset: 0; background: var(--modal-backdrop);
     display: none; align-items: center; justify-content: center; z-index: 100;
   }
   #settings-overlay.show { display: flex; }
   .settings-modal {
-    background: #161920; border: 1px solid #333; border-radius: 10px;
-    padding: 24px; min-width: 420px; max-width: 92vw;
+    background: var(--bg-panel); border: 1px solid var(--border-strong); border-radius: 10px;
+    padding: 24px; min-width: 520px; max-width: 92vw; max-height: 88vh;
+    display: flex; flex-direction: column;
   }
   .settings-modal h2 {
-    font-size: 16px; margin-bottom: 18px; font-weight: 600;
-    border-bottom: 1px solid #252932; padding-bottom: 10px;
+    font-size: 16px; margin-bottom: 14px; font-weight: 600;
+    border-bottom: 1px solid var(--border); padding-bottom: 10px;
   }
+  .settings-tabs {
+    display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 14px;
+  }
+  .settings-tabs .tab {
+    background: transparent; border: none; color: var(--text-muted); padding: 8px 14px;
+    font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent;
+    font-family: inherit;
+  }
+  .settings-tabs .tab:hover { color: var(--text); }
+  .settings-tabs .tab.active {
+    color: var(--color-green); border-bottom-color: var(--color-green);
+  }
+  .settings-body { overflow-y: auto; flex: 1; padding-right: 4px; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
   .setting-row {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 10px 0; border-bottom: 1px solid #1a1d24; gap: 16px;
+    padding: 10px 0; border-bottom: 1px solid var(--border-faint); gap: 16px;
   }
   .setting-row:last-of-type { border-bottom: none; }
-  .setting-row label { color: #c8cdd6; font-size: 13px; flex: 1; }
-  .setting-row .hint { color: #555; font-size: 11px; display: block; margin-top: 2px; }
+  .setting-row label { color: var(--text); font-size: 13px; flex: 1; }
+  .setting-row .hint { color: var(--text-dim); font-size: 11px; display: block; margin-top: 2px; }
   .setting-row input[type="number"],
+  .setting-row input[type="text"],
   .setting-row select {
-    background: #0d0f14; color: #c8cdd6; border: 1px solid #333; border-radius: 4px;
+    background: var(--bg-input); color: var(--text); border: 1px solid var(--border-strong); border-radius: 4px;
     padding: 6px 10px; font-family: 'SF Mono', Consolas, monospace; font-size: 13px;
-    width: 110px; text-align: right;
+    width: 160px; text-align: right;
   }
   .setting-row input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+
+  /* Theme-pick segmented control */
+  .theme-picker { display: inline-flex; gap: 0; border: 1px solid var(--border-strong); border-radius: 6px; overflow: hidden; }
+  .theme-picker label {
+    padding: 6px 14px; font-size: 12px; cursor: pointer; color: var(--text-muted);
+    border-right: 1px solid var(--border-strong); transition: background 0.15s;
+    flex: unset;
+  }
+  .theme-picker label:last-of-type { border-right: none; }
+  .theme-picker input[type="radio"] { display: none; }
+  .theme-picker input[type="radio"]:checked + label {
+    background: var(--chip-green-bg); color: var(--color-green);
+  }
+
+  /* Gauge thresholds table */
+  .gauge-table {
+    width: 100%; border-collapse: collapse; font-size: 12px;
+    font-family: 'SF Mono', Consolas, monospace;
+  }
+  .gauge-table th {
+    text-align: center; padding: 8px 6px; color: var(--text-muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: .6px; border-bottom: 1px solid var(--border);
+    font-size: 10px;
+  }
+  .gauge-table th.gauge-name-col { text-align: left; }
+  .gauge-table td { padding: 6px; border-bottom: 1px solid var(--border-faint); }
+  .gauge-table tr:last-child td { border-bottom: none; }
+  .gauge-table .g-name { color: var(--text); white-space: nowrap; }
+  .gauge-table input {
+    background: var(--bg-input); color: var(--text); border: 1.5px solid var(--border-strong); border-radius: 3px;
+    padding: 4px 6px; font-family: inherit; font-size: 11px;
+    width: 62px; text-align: right;
+  }
+  .gauge-table .red-col input    { border-color: var(--band-red); }
+  .gauge-table .yellow-col input { border-color: var(--band-yellow); }
+  .gauge-table .green-col input  { border-color: var(--band-green); }
+  .gauge-hint {
+    color: var(--text-dim); font-size: 11px; margin-top: 8px; font-style: italic;
+  }
   .settings-footer {
     margin-top: 18px; display: flex; justify-content: flex-end; gap: 10px;
-    padding-top: 14px; border-top: 1px solid #252932;
+    padding-top: 14px; border-top: 1px solid var(--border);
   }
   .settings-footer button {
     padding: 7px 18px; font-size: 13px; border-radius: 5px; cursor: pointer;
-    border: 1px solid #333; background: #1e2028; color: #c8cdd6;
+    border: 1px solid var(--border-strong); background: var(--chip-neutral-bg); color: var(--text);
     font-family: 'SF Mono', Consolas, monospace;
   }
   .settings-footer button.primary {
-    background: #0e2a1a; color: #3ddc84; border-color: #1a4a2a;
+    background: var(--chip-green-bg); color: var(--color-green); border-color: var(--border-accent);
   }
 
   /* ── Network Diagnostics View ────────────────────── */
@@ -222,11 +370,11 @@
     gap: 16px; padding: 20px 24px;
   }
   .dash-card {
-    background: #161920; border: 1px solid #252932; border-radius: 8px;
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
     padding: 16px; display: flex; flex-direction: column;
   }
   .dash-card h3 {
-    font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.8px;
+    font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px;
     margin-bottom: 12px; font-weight: 600;
   }
   .dash-card.full { grid-column: 1 / -1; }
@@ -234,22 +382,22 @@
   .chart-wrap { position: relative; height: 100%; min-height: 180px; flex: 1; }
   .dash-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .dash-table th {
-    text-align: left; padding: 6px 8px; color: #555; font-weight: 600;
-    text-transform: uppercase; letter-spacing: .6px; border-bottom: 1px solid #252932;
+    text-align: left; padding: 6px 8px; color: var(--text-dim); font-weight: 600;
+    text-transform: uppercase; letter-spacing: .6px; border-bottom: 1px solid var(--border);
   }
-  .dash-table td { padding: 7px 8px; border-bottom: 1px solid #1a1d24; }
+  .dash-table td { padding: 7px 8px; border-bottom: 1px solid var(--border-faint); }
   .dash-table tr:last-child td { border-bottom: none; }
-  .side-eth0 { color: #5b9cf6; }
-  .side-eth1 { color: #f6c75b; }
-  .val-warn { color: #e05252; font-weight: 600; }
-  .val-ok { color: #3ddc84; }
+  .side-eth0 { color: var(--color-blue); }
+  .side-eth1 { color: var(--color-gold-bright); }
+  .val-warn { color: var(--color-red); font-weight: 600; }
+  .val-ok { color: var(--color-green); }
   #pi-strip {
     font-size: 12px; font-family: 'SF Mono', Consolas, monospace;
-    color: #555; padding: 4px 24px;
+    color: var(--text-dim); padding: 4px 24px;
   }
-  #pi-strip .val { color: #8a94a4; }
-  #pi-strip .warn { color: #e3a34c; font-weight: 600; }
-  #pi-strip .crit { color: #d94b4b; font-weight: 600; }
+  #pi-strip .val { color: var(--text-soft); }
+  #pi-strip .warn { color: var(--color-amber); font-weight: 600; }
+  #pi-strip .crit { color: var(--color-red-bright); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -416,17 +564,17 @@
         <tbody>
           <tr><td class="side-eth1">eth1 (RDC)</td><td style="text-align:right" id="d-e1-rx-err">—</td><td style="text-align:right" id="d-e1-tx-err">—</td><td style="text-align:right" id="d-e1-rx-drop">—</td><td style="text-align:right" id="d-e1-crc">—</td></tr>
           <tr><td class="side-eth0">eth0 (Switch)</td><td style="text-align:right" id="d-e0-rx-err">—</td><td style="text-align:right" id="d-e0-tx-err">—</td><td style="text-align:right" id="d-e0-rx-drop">—</td><td style="text-align:right" id="d-e0-crc">—</td></tr>
-          <tr style="border-top:1px solid #252932;"><td style="color:#d4a54c">Switch Port 9</td><td style="text-align:right" id="d-sw-rx-err">—</td><td style="text-align:right" id="d-sw-tx-err">—</td><td style="text-align:right" id="d-sw-rx-drop">—</td><td style="text-align:right" id="d-sw-fcs">—</td></tr>
+          <tr style="border-top:1px solid var(--border);"><td style="color:var(--color-gold)">Switch Port 9</td><td style="text-align:right" id="d-sw-rx-err">—</td><td style="text-align:right" id="d-sw-tx-err">—</td><td style="text-align:right" id="d-sw-rx-drop">—</td><td style="text-align:right" id="d-sw-fcs">—</td></tr>
         </tbody>
       </table>
-      <div id="d-sw-detail" style="font-size:10px;color:#555;margin-top:8px;font-family:'SF Mono',Consolas,monospace;"></div>
+      <div id="d-sw-detail" style="font-size:10px;color:var(--text-dim);margin-top:8px;font-family:'SF Mono',Consolas,monospace;"></div>
     </div>
 
     <div class="dash-card full" id="d-decoded-card">
       <h3>Decoded Telemetry</h3>
       <table class="dash-table" id="d-decoded-table">
         <thead><tr><th>Name</th><th>Wire ID</th><th style="text-align:right">Value</th><th>Units</th></tr></thead>
-        <tbody id="d-decoded-body"><tr><td colspan="4" style="color:#555">Waiting...</td></tr></tbody>
+        <tbody id="d-decoded-body"><tr><td colspan="4" style="color:var(--text-dim)">Waiting...</td></tr></tbody>
       </table>
     </div>
 
@@ -440,39 +588,123 @@
   <div class="settings-modal">
     <h2>Settings</h2>
 
-    <div class="setting-row">
-      <label>
-        Temperature Units
-        <span class="hint">Fahrenheit or Celsius for all temperature displays</span>
-      </label>
-      <select id="s-temp-unit">
-        <option value="F">Fahrenheit</option>
-        <option value="C">Celsius</option>
-      </select>
+    <div class="settings-tabs">
+      <button class="tab active" data-panel="panel-display" onclick="showPanel(this)">Display</button>
+      <button class="tab" data-panel="panel-proxy" onclick="showPanel(this)">Proxy &amp; Network</button>
+      <button class="tab" data-panel="panel-gauges" onclick="showPanel(this)">Gauge Thresholds</button>
     </div>
 
-    <div class="setting-row">
-      <label>
-        Show Strip Charts on Dashboard
-        <span class="hint">Toggle per-gauge time-series plots</span>
-      </label>
-      <input type="checkbox" id="s-show-charts">
-    </div>
+    <div class="settings-body">
 
-    <div class="setting-row">
-      <label>
-        Chart Time Span (minutes)
-        <span class="hint">How much history each strip chart shows</span>
-      </label>
-      <input type="number" id="s-chart-span" min="1" max="60" step="1">
-    </div>
+      <!-- ── Display ─────────────────────────────────────────── -->
+      <div class="tab-panel active" id="panel-display">
+        <div class="setting-row">
+          <label>
+            Theme
+            <span class="hint">Follow your system preference or force light/dark</span>
+          </label>
+          <div class="theme-picker" id="s-theme-picker">
+            <input type="radio" name="theme" value="light"  id="theme-light"><label for="theme-light">Light</label>
+            <input type="radio" name="theme" value="dark"   id="theme-dark"><label for="theme-dark">Dark</label>
+            <input type="radio" name="theme" value="system" id="theme-system"><label for="theme-system">System</label>
+          </div>
+        </div>
 
-    <div class="setting-row">
-      <label>
-        Stability Threshold Before PROXY (seconds)
-        <span class="hint">How long internet must be stable before leaving LOCAL mode (default 300)</span>
-      </label>
-      <input type="number" id="s-stable-threshold" min="30" max="3600" step="10">
+        <div class="setting-row">
+          <label>
+            Temperature Units
+            <span class="hint">Fahrenheit or Celsius for all temperature displays</span>
+          </label>
+          <select id="s-temp-unit">
+            <option value="F">Fahrenheit</option>
+            <option value="C">Celsius</option>
+          </select>
+        </div>
+
+        <div class="setting-row">
+          <label>
+            Show Strip Charts on Dashboard
+            <span class="hint">Toggle per-gauge time-series plots</span>
+          </label>
+          <input type="checkbox" id="s-show-charts">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            Chart Time Span (minutes)
+            <span class="hint">How much history each strip chart shows</span>
+          </label>
+          <input type="number" id="s-chart-span" min="1" max="60" step="1">
+        </div>
+      </div>
+
+      <!-- ── Proxy & Network ─────────────────────────────────── -->
+      <div class="tab-panel" id="panel-proxy">
+        <div class="setting-row">
+          <label>
+            Generator IP (RDC)
+            <span class="hint">Static IP of the RDC on your LAN (default 10.0.0.50)</span>
+          </label>
+          <input type="text" id="s-rdc-ip">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            Cloud DNS
+            <span class="hint">Kohler cloud hostname — change for lab/emulator testing (default devices.kohler.com)</span>
+          </label>
+          <input type="text" id="s-cloud-dns">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            Internet Check Interval (seconds)
+            <span class="hint">How often to probe internet reachability (default 30)</span>
+          </label>
+          <input type="number" id="s-check-interval" min="5" max="600" step="5">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            Stability Threshold Before PROXY (seconds)
+            <span class="hint">How long internet must be stable before leaving LOCAL (default 300)</span>
+          </label>
+          <input type="number" id="s-stable-threshold" min="30" max="3600" step="10">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            Oil Check Runtime Interval (hours)
+            <span class="hint">Runtime hours between oil-check reminders (default 24)</span>
+          </label>
+          <input type="number" id="s-oil-hours" min="1" max="500" step="1">
+        </div>
+      </div>
+
+      <!-- ── Gauge Thresholds ────────────────────────────────── -->
+      <div class="tab-panel" id="panel-gauges">
+        <table class="gauge-table">
+          <thead>
+            <tr>
+              <th class="gauge-name-col">Gauge</th>
+              <th class="red-col">Min</th>
+              <th class="yellow-col">Yellow Lo</th>
+              <th class="green-col">Green Lo</th>
+              <th class="green-col">Green Hi</th>
+              <th class="yellow-col">Yellow Hi</th>
+              <th class="red-col">Max</th>
+            </tr>
+          </thead>
+          <tbody id="gauge-table-body">
+            <!-- Rows populated dynamically from /api/config -->
+          </tbody>
+        </table>
+        <div class="gauge-hint">
+          Empty Min/Max columns (e.g. frequency) leave the scale unbounded — the gauge
+          renders as value-only. Green band should sit inside Yellow; Yellow inside [Min, Max].
+        </div>
+      </div>
+
     </div>
 
     <div class="settings-footer">
@@ -487,40 +719,189 @@
 const POLL_MS = 2000;
 
 // ── Client settings (persisted to localStorage) ──────────────────────────────
-const DEFAULTS = { tempUnit: 'F', showCharts: false, chartSpanMin: 5 };
+const DEFAULTS = { tempUnit: 'F', showCharts: false, chartSpanMin: 5, theme: 'system' };
 let SETTINGS = { ...DEFAULTS, ...(JSON.parse(localStorage.getItem('rdcProxySettings') || '{}')) };
 
 function saveLocalSettings() {
   localStorage.setItem('rdcProxySettings', JSON.stringify(SETTINGS));
 }
 
+// ── Theme ────────────────────────────────────────────────────────────────────
+// resolvedTheme() returns 'light' or 'dark' — what the dashboard should
+// actually render as. 'system' delegates to prefers-color-scheme.
+function resolvedTheme() {
+  if (SETTINGS.theme === 'light' || SETTINGS.theme === 'dark') return SETTINGS.theme;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+function setThemeAttr() {
+  document.documentElement.setAttribute('data-theme', resolvedTheme());
+}
+
+function applyTheme() {
+  setThemeAttr();
+  // Chart.js bakes colors at creation time — rebuild existing charts so
+  // they pick up the new grid/tick colors. Guarded: the rebuild touches
+  // const/let names declared later in this script, so it's only safe
+  // after the script has fully parsed.
+  try { rebuildAllCharts(); } catch (e) { /* charts not initialized yet */ }
+}
+
+// Watch OS theme changes while in 'system' mode. Set up once.
+if (window.matchMedia) {
+  const mq = window.matchMedia('(prefers-color-scheme: light)');
+  const onChange = () => { if (SETTINGS.theme === 'system') applyTheme(); };
+  if (mq.addEventListener) mq.addEventListener('change', onChange);
+  else if (mq.addListener) mq.addListener(onChange);  // Safari <14
+}
+
+// Initial apply: set the `data-theme` attribute only. We can't rebuild
+// charts here because METRICS / gaugeCharts / chartPPS etc. are declared
+// with `const`/`let` further down — touching them now would throw a TDZ
+// ReferenceError and abort the rest of the script.
+setThemeAttr();
+
+// CSS var reader — lets Chart.js configs stay in sync with the active theme.
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function rebuildAllCharts() {
+  // Per-gauge strip charts
+  Object.keys(gaugeCharts).forEach(id => {
+    try { gaugeCharts[id].destroy(); } catch (e) {}
+    delete gaugeCharts[id];
+  });
+  if (SETTINGS.showCharts) {
+    METRICS.forEach(m => renderGaugeChart(m));
+  }
+  // Network Diagnostics charts — only rebuild if already initialized
+  if (chartsInitialized) {
+    try { chartPPS.destroy(); chartBPS.destroy(); chartPKT.destroy(); chartERR.destroy(); } catch (e) {}
+    chartsInitialized = false;
+    chartPPS = chartBPS = chartPKT = chartERR = null;
+    if (currentView === 'dashboard') initCharts();
+  }
+}
+
 // ── Settings modal ───────────────────────────────────────────────────────────
+// Server config snapshot, refreshed whenever we open the modal. Used to diff
+// on save so we only POST changed values and preserve fields the UI doesn't
+// expose (e.g. unit/label already in CFG).
+let SERVER_CFG = {};
+
+function showPanel(btn) {
+  document.querySelectorAll('.settings-tabs .tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(btn.dataset.panel).classList.add('active');
+}
+
 function openSettings() {
+  document.getElementById('theme-' + SETTINGS.theme).checked = true;
   document.getElementById('s-temp-unit').value = SETTINGS.tempUnit;
   document.getElementById('s-show-charts').checked = !!SETTINGS.showCharts;
   document.getElementById('s-chart-span').value = SETTINGS.chartSpanMin;
+
   fetch('/api/config').then(r => r.json()).then(c => {
+    SERVER_CFG = c || {};
+    document.getElementById('s-rdc-ip').value          = c.rdc_ip ?? '';
+    document.getElementById('s-cloud-dns').value       = c.cloud_dns ?? '';
+    document.getElementById('s-check-interval').value  = c.internet_check_interval_s ?? 30;
     document.getElementById('s-stable-threshold').value = c.internet_stable_before_proxy_s ?? 300;
+    document.getElementById('s-oil-hours').value       = c.oil_check_runtime_hours ?? 24;
+    renderGaugeTable(c.gauges || {});
   }).catch(() => {
-    document.getElementById('s-stable-threshold').value = 300;
+    SERVER_CFG = {};
+    renderGaugeTable({});
   });
+
   document.getElementById('settings-overlay').classList.add('show');
 }
 function closeSettings() { document.getElementById('settings-overlay').classList.remove('show'); }
 
+function renderGaugeTable(gauges) {
+  const body = document.getElementById('gauge-table-body');
+  body.innerHTML = '';
+  // Preferred display order: voltages, frequencies, battery, temps, rpm
+  const order = ['utility_v', 'generator_v', 'utility_hz', 'frequency_hz',
+                 'battery_v', 'controller_temp_f', 'oil_temp_f', 'rpm'];
+  const keys = order.filter(k => k in gauges).concat(
+    Object.keys(gauges).filter(k => !order.includes(k))
+  );
+  for (const gname of keys) {
+    const g = gauges[gname] || {};
+    const label = g.label || gname;
+    const unit = g.unit || '';
+    const green = Array.isArray(g.green) ? g.green : ['', ''];
+    const yellow = Array.isArray(g.yellow) ? g.yellow : ['', ''];
+    const row = document.createElement('tr');
+    row.dataset.gname = gname;
+    row.innerHTML = `
+      <td class="g-name">${label}<br><span style="color:var(--text-dim);font-size:10px">${unit}</span></td>
+      <td class="red-col"><input type="number" step="any" data-field="min" value="${g.min ?? ''}"></td>
+      <td class="yellow-col"><input type="number" step="any" data-field="yellow-lo" value="${yellow[0] ?? ''}"></td>
+      <td class="green-col"><input type="number" step="any" data-field="green-lo" value="${green[0] ?? ''}"></td>
+      <td class="green-col"><input type="number" step="any" data-field="green-hi" value="${green[1] ?? ''}"></td>
+      <td class="yellow-col"><input type="number" step="any" data-field="yellow-hi" value="${yellow[1] ?? ''}"></td>
+      <td class="red-col"><input type="number" step="any" data-field="max" value="${g.max ?? ''}"></td>
+    `;
+    body.appendChild(row);
+  }
+}
+
+function collectGaugeTable() {
+  // Returns { gname: { min, max, green: [lo, hi], yellow: [lo, hi] } }
+  // Only includes fields the user actually filled (empty = inherit previous).
+  const out = {};
+  const rows = document.querySelectorAll('#gauge-table-body tr');
+  const parseNum = v => (v === '' || v == null) ? null : Number(v);
+  rows.forEach(row => {
+    const gname = row.dataset.gname;
+    const min = parseNum(row.querySelector('[data-field="min"]').value);
+    const max = parseNum(row.querySelector('[data-field="max"]').value);
+    const gLo = parseNum(row.querySelector('[data-field="green-lo"]').value);
+    const gHi = parseNum(row.querySelector('[data-field="green-hi"]').value);
+    const yLo = parseNum(row.querySelector('[data-field="yellow-lo"]').value);
+    const yHi = parseNum(row.querySelector('[data-field="yellow-hi"]').value);
+    const patch = {};
+    if (min !== null) patch.min = min;
+    if (max !== null) patch.max = max;
+    if (gLo !== null && gHi !== null) patch.green = [gLo, gHi];
+    if (yLo !== null && yHi !== null) patch.yellow = [yLo, yHi];
+    if (Object.keys(patch).length) out[gname] = patch;
+  });
+  return out;
+}
+
 async function saveSettings() {
+  // Client-side (localStorage)
+  const prevTheme = resolvedTheme();
+  const themeRadio = document.querySelector('input[name="theme"]:checked');
+  SETTINGS.theme = themeRadio ? themeRadio.value : 'system';
   SETTINGS.tempUnit = document.getElementById('s-temp-unit').value;
   SETTINGS.showCharts = document.getElementById('s-show-charts').checked;
   SETTINGS.chartSpanMin = Math.max(1, parseInt(document.getElementById('s-chart-span').value || 5, 10));
   saveLocalSettings();
-  const stable = parseInt(document.getElementById('s-stable-threshold').value || 300, 10);
+  if (resolvedTheme() !== prevTheme) applyTheme();
+
+  // Server-side (/api/config)
+  const payload = {
+    rdc_ip: document.getElementById('s-rdc-ip').value.trim(),
+    cloud_dns: document.getElementById('s-cloud-dns').value.trim(),
+    internet_check_interval_s: parseInt(document.getElementById('s-check-interval').value || 30, 10),
+    internet_stable_before_proxy_s: parseInt(document.getElementById('s-stable-threshold').value || 300, 10),
+    oil_check_runtime_hours: parseInt(document.getElementById('s-oil-hours').value || 24, 10),
+    gauges: collectGaugeTable(),
+  };
   try {
     await fetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ internet_stable_before_proxy_s: stable }),
+      body: JSON.stringify(payload),
     });
   } catch (e) { console.error('config save failed', e); }
+
   applyChartVisibility();
   closeSettings();
 }
@@ -562,6 +943,8 @@ function ensureGaugeChart(metric) {
   const container = document.getElementById('chart-' + metric.id);
   if (!container) return null;
   const canvas = container.querySelector('canvas');
+  const tickColor = cssVar('--text-dim');
+  const gridColor = cssVar('--border-faint');
   const c = new Chart(canvas, {
     type: 'line',
     data: { labels: [], datasets: [{
@@ -572,8 +955,8 @@ function ensureGaugeChart(metric) {
       animation: false, responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { enabled: true } },
       scales: {
-        x: { ticks: { color: '#555', maxTicksLimit: 6, font: { size: 10 }, maxRotation: 0 }, grid: { color: '#1a1d24' } },
-        y: { ticks: { color: '#555', font: { size: 10 } }, grid: { color: '#1a1d24' } },
+        x: { ticks: { color: tickColor, maxTicksLimit: 6, font: { size: 10 }, maxRotation: 0 }, grid: { color: gridColor } },
+        y: { ticks: { color: tickColor, font: { size: 10 } }, grid: { color: gridColor } },
       },
     },
   });
@@ -612,15 +995,18 @@ function mkDataset(label, color) {
   return { label, borderColor: color, backgroundColor: 'transparent', borderWidth: 1.8, pointRadius: 0, tension: 0, data: [] };
 }
 function mkChart(id, datasets) {
+  const tickColor = cssVar('--text-dim');
+  const gridColor = cssVar('--border-faint');
+  const legendColor = cssVar('--text-muted');
   return new Chart(document.getElementById(id), {
     type: 'line', data: { labels: [], datasets },
     options: {
       animation: false, responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { labels: { color: '#7a8494', boxWidth: 12, font: { size: 11 } } } },
+      plugins: { legend: { labels: { color: legendColor, boxWidth: 12, font: { size: 11 } } } },
       scales: {
-        x: { ticks: { color: '#555', maxTicksLimit: 8, font: { size: 10 }, maxRotation: 0 }, grid: { color: '#1a1d24' } },
-        y: { beginAtZero: true, ticks: { color: '#555', font: { size: 10 } }, grid: { color: '#1a1d24' } }
+        x: { ticks: { color: tickColor, maxTicksLimit: 8, font: { size: 10 }, maxRotation: 0 }, grid: { color: gridColor } },
+        y: { beginAtZero: true, ticks: { color: tickColor, font: { size: 10 } }, grid: { color: gridColor } }
       }
     }
   });
@@ -921,7 +1307,7 @@ async function poll() {
 
       if (d.decoded && d.decoded.length > 0) {
         document.getElementById('d-decoded-body').innerHTML = d.decoded.map(r =>
-          `<tr><td>${r.name}</td><td style="font-family:monospace;color:#7a8494;font-size:11px">${r.id_hex}</td><td style="text-align:right;font-family:monospace;font-weight:600">${typeof r.value==='number'?(Math.abs(r.value)>1e9?r.value.toExponential(3):r.value.toLocaleString()):r.value}</td><td>${r.units}</td></tr>`
+          `<tr><td>${r.name}</td><td style="font-family:monospace;color:var(--text-muted);font-size:11px">${r.id_hex}</td><td style="text-align:right;font-family:monospace;font-weight:600">${typeof r.value==='number'?(Math.abs(r.value)>1e9?r.value.toExponential(3):r.value.toLocaleString()):r.value}</td><td>${r.units}</td></tr>`
         ).join('');
       }
     }

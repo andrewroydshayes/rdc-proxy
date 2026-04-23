@@ -39,19 +39,46 @@ def reset_oil():
     return jsonify({"ok": True})
 
 
-# Config keys the UI is allowed to change. Anything outside this set is
-# ignored on POST to avoid letting the dashboard rewrite DNS or port values.
-_SETTABLE = {"internet_stable_before_proxy_s"}
+# Top-level config keys the UI is allowed to change. Anything outside this set
+# is ignored on POST so the dashboard can't rewrite ports, config_dir, etc.
+_SETTABLE = {
+    "internet_stable_before_proxy_s",
+    "internet_check_interval_s",
+    "oil_check_runtime_hours",
+    "rdc_ip",
+    "cloud_dns",
+}
+
+# Per-gauge fields the UI can edit. `min`/`max` are the scale; `green`/`yellow`
+# are [lo, hi] bands; `unit`/`label` are cosmetic.
+_GAUGE_FIELDS = {"min", "max", "green", "yellow", "unit", "label"}
 
 
 @app.route("/api/config", methods=["GET", "POST"])
 def api_config():
     if request.method == "GET":
-        return jsonify({k: CFG.get(k) for k in _SETTABLE})
+        out = {k: CFG.get(k) for k in _SETTABLE}
+        out["gauges"] = {k: dict(v) for k, v in CFG.get("gauges", {}).items()}
+        return jsonify(out)
     data = request.get_json(silent=True) or {}
     updated = {}
     for k, v in data.items():
-        if k in _SETTABLE:
+        if k == "gauges" and isinstance(v, dict):
+            gauges = CFG.setdefault("gauges", {})
+            merged = {}
+            for gname, gpatch in v.items():
+                if not isinstance(gpatch, dict) or gname not in gauges:
+                    continue
+                wrote = False
+                for field, val in gpatch.items():
+                    if field in _GAUGE_FIELDS:
+                        gauges[gname][field] = val
+                        wrote = True
+                if wrote:
+                    merged[gname] = dict(gauges[gname])
+            if merged:
+                updated["gauges"] = merged
+        elif k in _SETTABLE:
             CFG[k] = v
             updated[k] = v
     if updated:
