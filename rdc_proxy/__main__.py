@@ -33,7 +33,7 @@ async def main():
     await asyncio.sleep(2)
 
     if not STATE.internet_up and not have_handshake():
-        STATE.proxy_mode = "waiting"
+        STATE.set_proxy_mode("waiting")
         print("[startup] NO internet + NO handshake — WAITING for internet to capture handshake", flush=True)
         print("[startup] Connect the Pi to internet and restart, or provide a handshake.json", flush=True)
 

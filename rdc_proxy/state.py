@@ -48,6 +48,7 @@ class GeneratorState:
     def update(self, name, value):
         with self.lock:
             old = self.values.get(name)
+            prev_engine_mode = self._display_mode()
             self.values[name] = value
             self.last_update = time.time()
 
@@ -66,6 +67,13 @@ class GeneratorState:
                         "msg": f"Utility restored (generator ran {dur})",
                     })
                 self.gen_started_at = None
+
+            new_engine_mode = self._display_mode()
+            if new_engine_mode != prev_engine_mode and "exercise" in (prev_engine_mode, new_engine_mode):
+                self._events.appendleft({
+                    "ts": datetime.now().strftime("%H:%M:%S"),
+                    "msg": f"Engine state: {prev_engine_mode} → {new_engine_mode}",
+                })
 
     def ingest_buffer(self, buf):
         for rid, name, value, units in parse_tlv_records(buf):
@@ -137,6 +145,30 @@ class GeneratorState:
                 "gauges": CFG.get("gauges", {}),
                 "side_channels": {k: dict(v) for k, v in self._side_channels.items()},
             }
+
+    def set_proxy_mode(self, new_mode):
+        """Update proxy mode and log a user-facing event on transition."""
+        with self.lock:
+            old = self.proxy_mode
+            if old == new_mode:
+                return
+            self.proxy_mode = new_mode
+            msg_map = {
+                ("startup", "proxy"):  "Proxy service started — relaying to Kohler cloud",
+                ("startup", "local"):  "Proxy service started — serving locally (no cloud)",
+                ("startup", "waiting"): "Proxy service started — waiting for internet",
+                ("proxy",   "local"):  "Switched to LOCAL mode (cloud unreachable)",
+                ("local",   "proxy"):  "Switched to PROXY mode (cloud back online)",
+                ("waiting", "proxy"):  "Captured handshake — now in PROXY mode",
+                ("waiting", "local"):  "Switched to LOCAL mode from WAITING",
+                ("proxy",   "waiting"): "Lost cloud connection — WAITING",
+                ("local",   "waiting"): "Entered WAITING mode",
+            }
+            msg = msg_map.get((old, new_mode), f"Proxy mode: {old} → {new_mode}")
+            self._events.appendleft({
+                "ts": datetime.now().strftime("%H:%M:%S"),
+                "msg": msg,
+            })
 
     def reset_oil_check(self):
         with self.lock:

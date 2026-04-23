@@ -153,7 +153,7 @@ async def handle_rdc_connection(rdc_reader, rdc_writer):
         if have_handshake():
             await local_mode(rdc_reader, rdc_writer)
         else:
-            STATE.proxy_mode = "waiting"
+            STATE.set_proxy_mode("waiting")
             print("[proxy] no handshake + no stable internet — WAITING mode", flush=True)
             while not STATE.internet_up:
                 await asyncio.sleep(5)
@@ -171,7 +171,7 @@ async def handle_rdc_connection(rdc_reader, rdc_writer):
 
 async def proxy_mode(rdc_reader, rdc_writer, cloud_ip, cloud_port=None):
     """Bidirectional pass-through. Captures handshake on first run."""
-    STATE.proxy_mode = "proxy"
+    STATE.set_proxy_mode("proxy")
     STATE.cloud_ip = cloud_ip
     cp = cloud_port or CFG["cloud_port"]
     print(f"[proxy] PROXY mode — connecting to cloud {cloud_ip}:{cp}", flush=True)
@@ -249,7 +249,7 @@ async def proxy_mode(rdc_reader, rdc_writer, cloud_ip, cloud_port=None):
 
 async def local_mode(rdc_reader, rdc_writer):
     """Replay the captured cloud handshake; absorb telemetry."""
-    STATE.proxy_mode = "local"
+    STATE.set_proxy_mode("local")
     STATE.cloud_connected = False
     print("[proxy] LOCAL mode — serving as cloud", flush=True)
 

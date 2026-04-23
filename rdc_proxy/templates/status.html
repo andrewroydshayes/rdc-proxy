@@ -12,25 +12,38 @@
     background: #161920; padding: 16px 24px;
     border-bottom: 1px solid #252932;
     display: flex; justify-content: space-between; align-items: center;
+    gap: 16px; flex-wrap: wrap;
   }
   header h1 { font-size: 18px; font-weight: 600; }
-
-  #mode-banner {
-    padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 600;
-    letter-spacing: 0.5px; text-transform: uppercase;
+  header h1 .ident {
+    font-weight: 400; color: #7a8494; margin-left: 10px;
   }
-  .mode-standby  { background: #0e2a1a; color: #3ddc84; }
-  .mode-exercise { background: #2a2a0e; color: #dcdc3d; }
-  .mode-running  { background: #2a0e0e; color: #e05252; }
-  .mode-waiting  { background: #1e2028; color: #7a8494; }
+
+  .header-left  { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .header-right { display: flex; align-items: center; gap: 8px; }
+
+  /* Inline Generator State (sits next to title) */
+  .gen-state-inline {
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .gen-state-inline .label {
+    font-size: 11px; color: #7a8494; text-transform: uppercase; letter-spacing: 1.2px;
+  }
+  #gen-state-pill {
+    padding: 5px 14px; border-radius: 6px; font-size: 13px; font-weight: 700;
+    letter-spacing: 0.8px; text-transform: uppercase;
+  }
 
   #conn-strip {
     font-size: 11px; font-family: 'SF Mono', Consolas, monospace;
     color: #555; padding: 4px 24px; background: #12141a;
     border-bottom: 1px solid #1a1d24;
+    display: flex; justify-content: space-between; align-items: center;
   }
   #conn-strip .on  { color: #3ddc84; }
   #conn-strip .off { color: #e05252; }
+  #conn-strip .warn { color: #e3a34c; }
+  #conn-strip .version { color: #7a8494; font-weight: 600; }
 
   #proxy-explain {
     font-size: 12px; font-family: 'SF Mono', Consolas, monospace;
@@ -42,6 +55,11 @@
   #proxy-explain .wait   { color: #e0a852; }
   #proxy-explain .error  { color: #e05252; }
   #proxy-explain .count  { color: #c8cdd6; font-weight: 600; }
+
+  .mode-standby  { background: #0e2a1a; color: #3ddc84; }
+  .mode-exercise { background: #2a2a0e; color: #dcdc3d; }
+  .mode-running  { background: #2a0e0e; color: #e05252; }
+  .mode-waiting  { background: #1e2028; color: #7a8494; }
 
   .dashboard {
     display: grid;
@@ -129,21 +147,75 @@
   /* ── Events ───────────────────────────────────────── */
   #events { font-size: 12px; font-family: 'SF Mono', Consolas, monospace; line-height: 1.8; color: #7a8494; }
   .ev-ts { color: #555; margin-right: 8px; }
+  .ev-empty { color: #555; font-style: italic; }
 
   .color-green  { color: #3ddc84; }
   .color-yellow { color: #e3a34c; }
   .color-red    { color: #e05252; }
 
-  /* ── View Toggle ─────────────────────────────────── */
+  /* ── View Toggle & Gear ──────────────────────────── */
   .view-btn {
     background: #1e2028; color: #7a8494; border: 1px solid #333; border-radius: 5px;
     padding: 5px 14px; font-size: 12px; cursor: pointer; font-family: 'SF Mono', Consolas, monospace;
-    margin-left: 8px;
   }
   .view-btn.active { background: #0e2a1a; color: #3ddc84; border-color: #1a4a2a; }
-  .header-right { display: flex; align-items: center; gap: 8px; }
 
-  /* ── Dashboard View ──────────────────────────────── */
+  .gear-btn {
+    background: transparent; border: 1px solid #333; color: #7a8494;
+    width: 32px; height: 32px; border-radius: 6px; cursor: pointer;
+    font-size: 16px; line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .gear-btn:hover { color: #c8cdd6; border-color: #555; }
+
+  /* ── Per-gauge strip chart canvas ─────────────────── */
+  .gauge-chart {
+    margin-top: 10px; height: 120px; display: none; position: relative;
+  }
+  .gauge-chart.show { display: block; }
+
+  /* ── Settings modal ──────────────────────────────── */
+  #settings-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+  }
+  #settings-overlay.show { display: flex; }
+  .settings-modal {
+    background: #161920; border: 1px solid #333; border-radius: 10px;
+    padding: 24px; min-width: 420px; max-width: 92vw;
+  }
+  .settings-modal h2 {
+    font-size: 16px; margin-bottom: 18px; font-weight: 600;
+    border-bottom: 1px solid #252932; padding-bottom: 10px;
+  }
+  .setting-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid #1a1d24; gap: 16px;
+  }
+  .setting-row:last-of-type { border-bottom: none; }
+  .setting-row label { color: #c8cdd6; font-size: 13px; flex: 1; }
+  .setting-row .hint { color: #555; font-size: 11px; display: block; margin-top: 2px; }
+  .setting-row input[type="number"],
+  .setting-row select {
+    background: #0d0f14; color: #c8cdd6; border: 1px solid #333; border-radius: 4px;
+    padding: 6px 10px; font-family: 'SF Mono', Consolas, monospace; font-size: 13px;
+    width: 110px; text-align: right;
+  }
+  .setting-row input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+  .settings-footer {
+    margin-top: 18px; display: flex; justify-content: flex-end; gap: 10px;
+    padding-top: 14px; border-top: 1px solid #252932;
+  }
+  .settings-footer button {
+    padding: 7px 18px; font-size: 13px; border-radius: 5px; cursor: pointer;
+    border: 1px solid #333; background: #1e2028; color: #c8cdd6;
+    font-family: 'SF Mono', Consolas, monospace;
+  }
+  .settings-footer button.primary {
+    background: #0e2a1a; color: #3ddc84; border-color: #1a4a2a;
+  }
+
+  /* ── Network Diagnostics View ────────────────────── */
   #view-dashboard { display: none; }
   .dash-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -178,33 +250,40 @@
   #pi-strip .val { color: #8a94a4; }
   #pi-strip .warn { color: #e3a34c; font-weight: 600; }
   #pi-strip .crit { color: #d94b4b; font-weight: 600; }
-  .conf-badge { display:inline-block; padding:1px 6px; border-radius:3px; font-size:10px;
-                font-family:'SF Mono',Consolas,monospace; font-weight:600; }
-  .conf-confirmed { background:#0e2a1a; color:#3ddc84; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Kohler Generator</h1>
+  <div class="header-left">
+    <h1>Kohler Generator Monitor<span class="ident" id="ident-tag"></span></h1>
+    <div class="gen-state-inline">
+      <span class="label">Generator State:</span>
+      <span id="gen-state-pill" class="mode-waiting">—</span>
+    </div>
+  </div>
   <div class="header-right">
-    <div id="mode-banner" class="mode-waiting">Starting...</div>
     <button class="view-btn active" id="btn-status" onclick="showView('status')">Status</button>
-    <button class="view-btn" id="btn-dashboard" onclick="showView('dashboard')">Dashboard</button>
+    <button class="view-btn" id="btn-dashboard" onclick="showView('dashboard')">Network Diagnostics</button>
+    <button class="gear-btn" id="btn-settings" onclick="openSettings()" title="Settings">⚙</button>
   </div>
 </header>
 
 <div id="conn-strip">
-  Proxy: <span id="proxy-mode">—</span>
-  &nbsp;&middot;&nbsp; Cloud: <span id="cloud-status">—</span>
-  &nbsp;&middot;&nbsp; RDC: <span id="rdc-status">—</span>
-  &nbsp;&middot;&nbsp; Internet: <span id="inet-status">—</span>
-  &nbsp;&middot;&nbsp; Updated: <span id="last-update">—</span>
+  <div>
+    Proxy: <span id="proxy-mode">—</span>
+    &nbsp;&middot;&nbsp; Cloud: <span id="cloud-status">—</span>
+    &nbsp;&middot;&nbsp; RDC: <span id="rdc-status">—</span>
+    &nbsp;&middot;&nbsp; Internet: <span id="inet-status">—</span>
+    &nbsp;&middot;&nbsp; Updated: <span id="last-update" class="on">—</span>
+  </div>
+  <div class="version">rdc-proxy v<span id="version">—</span></div>
 </div>
 
 <div id="proxy-explain">Starting…</div>
 
 <div id="view-status">
+
 <div class="dashboard">
 
   <!-- Power Source -->
@@ -227,6 +306,7 @@
     <h3>Voltage</h3>
     <div id="gauge-util-v" class="gauge-linear"></div>
     <div id="gauge-gen-v" class="gauge-linear" style="display:none;"></div>
+    <div class="gauge-chart" id="chart-util-v"><canvas></canvas></div>
   </div>
 
   <!-- Frequency -->
@@ -240,19 +320,23 @@
       <span class="name">Generator</span>
       <span class="val" id="gen-hz-val">—</span>
     </div>
+    <div class="gauge-chart" id="chart-util-hz"><canvas></canvas></div>
   </div>
 
   <!-- Battery -->
   <div class="card">
     <h3>Battery</h3>
     <div id="gauge-batt" class="gauge-linear"></div>
+    <div class="gauge-chart" id="chart-batt"><canvas></canvas></div>
   </div>
 
   <!-- Temperatures -->
   <div class="card">
     <h3>Temperatures</h3>
     <div id="gauge-ctrl-temp" class="gauge-linear"></div>
+    <div class="gauge-chart" id="chart-ctrl-temp"><canvas></canvas></div>
     <div id="gauge-oil-temp" class="gauge-linear"></div>
+    <div class="gauge-chart" id="chart-oil-temp"><canvas></canvas></div>
   </div>
 
   <!-- RPM (shown during exercise/running) -->
@@ -260,18 +344,17 @@
     <h3>Engine Speed</h3>
     <div class="gauge-circular">
       <svg viewBox="0 0 200 120" id="rpm-svg">
-        <!-- Background arc bands -->
         <path id="rpm-band-red-lo" d="" fill="none" stroke="#e05252" stroke-width="14" opacity="0.25"/>
         <path id="rpm-band-yellow-lo" d="" fill="none" stroke="#e3a34c" stroke-width="14" opacity="0.25"/>
         <path id="rpm-band-green" d="" fill="none" stroke="#3ddc84" stroke-width="14" opacity="0.25"/>
         <path id="rpm-band-yellow-hi" d="" fill="none" stroke="#e3a34c" stroke-width="14" opacity="0.25"/>
         <path id="rpm-band-red-hi" d="" fill="none" stroke="#e05252" stroke-width="14" opacity="0.25"/>
-        <!-- Needle -->
         <line id="rpm-needle" x1="100" y1="105" x2="100" y2="20" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
       </svg>
       <div class="rpm-value" id="rpm-value">0</div>
       <div class="rpm-label">RPM</div>
     </div>
+    <div class="gauge-chart" id="chart-rpm"><canvas></canvas></div>
   </div>
 
   <!-- Hours -->
@@ -301,14 +384,14 @@
   <!-- Events -->
   <div class="card">
     <h3>Events</h3>
-    <div id="events"><span style="color:#555">Waiting for data...</span></div>
+    <div id="events"><span class="ev-empty">No events recorded yet.</span></div>
   </div>
 
 </div>
 </div><!-- /view-status -->
 
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
-<!-- Dashboard View -->
+<!-- Network Diagnostics View -->
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <div id="view-dashboard">
   <div id="pi-strip">
@@ -350,9 +433,97 @@
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- Settings Modal -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div id="settings-overlay" onclick="if(event.target===this) closeSettings()">
+  <div class="settings-modal">
+    <h2>Settings</h2>
+
+    <div class="setting-row">
+      <label>
+        Temperature Units
+        <span class="hint">Fahrenheit or Celsius for all temperature displays</span>
+      </label>
+      <select id="s-temp-unit">
+        <option value="F">Fahrenheit</option>
+        <option value="C">Celsius</option>
+      </select>
+    </div>
+
+    <div class="setting-row">
+      <label>
+        Show Strip Charts on Dashboard
+        <span class="hint">Toggle per-gauge time-series plots</span>
+      </label>
+      <input type="checkbox" id="s-show-charts">
+    </div>
+
+    <div class="setting-row">
+      <label>
+        Chart Time Span (minutes)
+        <span class="hint">How much history each strip chart shows</span>
+      </label>
+      <input type="number" id="s-chart-span" min="1" max="60" step="1">
+    </div>
+
+    <div class="setting-row">
+      <label>
+        Stability Threshold Before PROXY (seconds)
+        <span class="hint">How long internet must be stable before leaving LOCAL mode (default 300)</span>
+      </label>
+      <input type="number" id="s-stable-threshold" min="30" max="3600" step="10">
+    </div>
+
+    <div class="settings-footer">
+      <button onclick="closeSettings()">Cancel</button>
+      <button class="primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script src="/static/chart.min.js"></script>
 <script>
 const POLL_MS = 2000;
+
+// ── Client settings (persisted to localStorage) ──────────────────────────────
+const DEFAULTS = { tempUnit: 'F', showCharts: false, chartSpanMin: 5 };
+let SETTINGS = { ...DEFAULTS, ...(JSON.parse(localStorage.getItem('rdcProxySettings') || '{}')) };
+
+function saveLocalSettings() {
+  localStorage.setItem('rdcProxySettings', JSON.stringify(SETTINGS));
+}
+
+// ── Settings modal ───────────────────────────────────────────────────────────
+function openSettings() {
+  document.getElementById('s-temp-unit').value = SETTINGS.tempUnit;
+  document.getElementById('s-show-charts').checked = !!SETTINGS.showCharts;
+  document.getElementById('s-chart-span').value = SETTINGS.chartSpanMin;
+  fetch('/api/config').then(r => r.json()).then(c => {
+    document.getElementById('s-stable-threshold').value = c.internet_stable_before_proxy_s ?? 300;
+  }).catch(() => {
+    document.getElementById('s-stable-threshold').value = 300;
+  });
+  document.getElementById('settings-overlay').classList.add('show');
+}
+function closeSettings() { document.getElementById('settings-overlay').classList.remove('show'); }
+
+async function saveSettings() {
+  SETTINGS.tempUnit = document.getElementById('s-temp-unit').value;
+  SETTINGS.showCharts = document.getElementById('s-show-charts').checked;
+  SETTINGS.chartSpanMin = Math.max(1, parseInt(document.getElementById('s-chart-span').value || 5, 10));
+  saveLocalSettings();
+  const stable = parseInt(document.getElementById('s-stable-threshold').value || 300, 10);
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ internet_stable_before_proxy_s: stable }),
+    });
+  } catch (e) { console.error('config save failed', e); }
+  applyChartVisibility();
+  closeSettings();
+}
 
 // ── View Toggle ──────────────────────────────────────────────────────────────
 let currentView = 'status';
@@ -365,7 +536,74 @@ function showView(view) {
   if (view === 'dashboard' && !chartsInitialized) initCharts();
 }
 
-// ── Dashboard Charts (lazy init) ─────────────────────────────────────────────
+// ── Per-gauge strip charts ───────────────────────────────────────────────────
+const METRICS = [
+  { id: 'util-v',     key: 'utilityVoltageV',     label: 'Utility Voltage',     unit: 'V',   color: '#3ddc84' },
+  { id: 'util-hz',    key: 'utilityFrequencyHz',  label: 'Utility Frequency',   unit: 'Hz',  color: '#5b9cf6' },
+  { id: 'batt',       key: 'batteryVoltageV',     label: 'Battery',             unit: 'V',   color: '#e3a34c' },
+  { id: 'ctrl-temp',  key: 'controllerTempF',     label: 'Controller Temp',     unit: '°F',  color: '#f6c75b', temp: true },
+  { id: 'oil-temp',   key: 'oilTempF',            label: 'Oil Temp',            unit: '°F',  color: '#e05252', temp: true },
+  { id: 'rpm',        key: 'engineSpeedRpm',      label: 'Engine Speed',        unit: 'RPM', color: '#dcc43d' },
+];
+const histories = {};  // id -> [{t, v}]
+const gaugeCharts = {};  // id -> Chart instance
+
+function pushMetric(id, value) {
+  if (value == null || isNaN(value)) return;
+  const now = Date.now();
+  const cutoff = now - SETTINGS.chartSpanMin * 60 * 1000;
+  const h = (histories[id] = histories[id] || []);
+  h.push({ t: now, v: value });
+  while (h.length && h[0].t < cutoff) h.shift();
+}
+
+function ensureGaugeChart(metric) {
+  if (gaugeCharts[metric.id]) return gaugeCharts[metric.id];
+  const container = document.getElementById('chart-' + metric.id);
+  if (!container) return null;
+  const canvas = container.querySelector('canvas');
+  const c = new Chart(canvas, {
+    type: 'line',
+    data: { labels: [], datasets: [{
+      label: metric.label, borderColor: metric.color, backgroundColor: 'transparent',
+      borderWidth: 1.8, pointRadius: 0, tension: 0.2, data: [],
+    }] },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: true } },
+      scales: {
+        x: { ticks: { color: '#555', maxTicksLimit: 6, font: { size: 10 }, maxRotation: 0 }, grid: { color: '#1a1d24' } },
+        y: { ticks: { color: '#555', font: { size: 10 } }, grid: { color: '#1a1d24' } },
+      },
+    },
+  });
+  gaugeCharts[metric.id] = c;
+  return c;
+}
+
+function renderGaugeChart(metric) {
+  const container = document.getElementById('chart-' + metric.id);
+  if (!container || !container.classList.contains('show')) return;
+  const chart = ensureGaugeChart(metric);
+  if (!chart) return;
+  const h = histories[metric.id] || [];
+  const inC = metric.temp && SETTINGS.tempUnit === 'C';
+  chart.data.labels = h.map(p => new Date(p.t).toLocaleTimeString([], { hour12: false }));
+  chart.data.datasets[0].data = h.map(p => inC ? (p.v - 32) * 5 / 9 : p.v);
+  chart.data.datasets[0].label = `${metric.label} (${inC ? '°C' : metric.unit})`;
+  chart.update('none');
+}
+
+function applyChartVisibility() {
+  METRICS.forEach(m => {
+    const container = document.getElementById('chart-' + m.id);
+    if (!container) return;
+    container.classList.toggle('show', !!SETTINGS.showCharts);
+    if (SETTINGS.showCharts) renderGaugeChart(m);
+  });
+}
+
+// ── Network Diagnostics Charts (lazy init) ───────────────────────────────────
 let chartsInitialized = false;
 let chartPPS, chartBPS, chartPKT, chartERR;
 const MAX_POINTS = 120;
@@ -419,25 +657,33 @@ function fmt(v) { if(v>=1e6) return (v/1e6).toFixed(1)+'M'; if(v>=1e3) return (v
 
 // ── Gauge rendering ──────────────────────────────────────────────────────────
 
-function renderLinearGauge(containerId, cfg, value) {
+function tempConvert(f) { return (f - 32) * 5 / 9; }
+
+function renderLinearGauge(containerId, cfg, value, opts = {}) {
   const el = document.getElementById(containerId);
   if (!el || !cfg) return;
-  const min = cfg.min || 0, max = cfg.max || 100;
-  const green = cfg.green || [min, max];
-  const yellow = cfg.yellow || [min, max];
+  const isTemp = !!opts.isTemp;
+  const asC = isTemp && SETTINGS.tempUnit === 'C';
+  const conv = v => (asC ? tempConvert(v) : v);
+
+  const min = conv(cfg.min || 0), max = conv(cfg.max || 100);
+  const green = (cfg.green || [cfg.min, cfg.max]).map(conv);
+  const yellow = (cfg.yellow || [cfg.min, cfg.max]).map(conv);
+  const dispValue = value != null ? conv(value) : null;
+
   const pct = v => Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100));
   const colorClass = (v) => {
     if (v >= green[0] && v <= green[1]) return 'color-green';
     if (v >= yellow[0] && v <= yellow[1]) return 'color-yellow';
     return 'color-red';
   };
-  const unit = cfg.unit || '';
+  const unit = asC ? '°C' : (cfg.unit || '');
   const label = cfg.label || '';
 
   el.innerHTML = `
     <div class="gauge-label">
       <span class="name">${label}</span>
-      <span class="val ${colorClass(value)}">${value != null ? value.toFixed(1) : '—'} ${unit}</span>
+      <span class="val ${dispValue != null ? colorClass(dispValue) : ''}">${dispValue != null ? dispValue.toFixed(1) : '—'} ${unit}</span>
     </div>
     <div class="gauge-track">
       <div class="gauge-band band-red" style="left:0%;width:${pct(yellow[0])}%"></div>
@@ -445,7 +691,7 @@ function renderLinearGauge(containerId, cfg, value) {
       <div class="gauge-band band-green" style="left:${pct(green[0])}%;width:${pct(green[1])-pct(green[0])}%"></div>
       <div class="gauge-band band-yellow" style="left:${pct(green[1])}%;width:${pct(yellow[1])-pct(green[1])}%"></div>
       <div class="gauge-band band-red" style="left:${pct(yellow[1])}%;width:${100-pct(yellow[1])}%"></div>
-      ${value != null ? `<div class="gauge-needle" style="left:${pct(value)}%"></div>` : ''}
+      ${dispValue != null ? `<div class="gauge-needle" style="left:${pct(dispValue)}%"></div>` : ''}
     </div>`;
 }
 
@@ -508,6 +754,8 @@ function fmtDuration(secs) {
   return `${s}s`;
 }
 
+function fmtHours(v) { return v != null ? `${v.toFixed(1)} hrs` : '—'; }
+
 // ── Polling ──────────────────────────────────────────────────────────────────
 
 async function poll() {
@@ -518,20 +766,29 @@ async function poll() {
     const g = d.gauges || {};
     const mode = d.mode;
 
-    // Mode banner
-    const banner = document.getElementById('mode-banner');
-    if (mode === 'standby') {
-      banner.className = 'mode-standby'; banner.textContent = 'Standby';
-    } else if (mode === 'exercise') {
-      banner.className = 'mode-exercise'; banner.textContent = 'Exercise';
-    } else if (mode === 'running') {
-      banner.className = 'mode-running'; banner.textContent = 'Generator Running';
-    } else {
-      banner.className = 'mode-waiting'; banner.textContent = d.proxy_mode || 'Starting';
+    // Version + identity
+    if (d.version) document.getElementById('version').textContent = d.version;
+    const model = v.modelCode || '';
+    const serial = v.serialNumber || '';
+    const identEl = document.getElementById('ident-tag');
+    if (model || serial) {
+      identEl.textContent = '— ' + [model, serial].filter(Boolean).join(' · ');
     }
 
+    // Centered Generator State pill
+    const pill = document.getElementById('gen-state-pill');
+    if (mode === 'standby') { pill.className = 'mode-standby'; pill.textContent = 'STANDBY'; }
+    else if (mode === 'exercise') { pill.className = 'mode-exercise'; pill.textContent = 'EXERCISE'; }
+    else if (mode === 'running') { pill.className = 'mode-running'; pill.textContent = 'RUNNING'; }
+    else { pill.className = 'mode-waiting'; pill.textContent = (d.proxy_mode || 'starting').toUpperCase(); }
+
     // Connection strip
-    document.getElementById('proxy-mode').textContent = d.proxy_mode || '—';
+    const pmEl = document.getElementById('proxy-mode');
+    pmEl.textContent = d.proxy_mode || '—';
+    pmEl.className = d.proxy_mode === 'proxy' ? 'on'
+      : d.proxy_mode === 'local' ? 'warn'
+      : d.proxy_mode === 'waiting' ? 'off' : '';
+
     const mkStatus = (ok, label) => `<span class="${ok?'on':'off'}">${label || (ok?'connected':'disconnected')}</span>`;
     document.getElementById('cloud-status').innerHTML = mkStatus(d.cloud_connected, d.cloud_ip || (d.cloud_connected ? 'connected' : 'disconnected'));
     document.getElementById('rdc-status').innerHTML = mkStatus(d.rdc_connected);
@@ -540,9 +797,6 @@ async function poll() {
       document.getElementById('last-update').textContent = new Date(d.last_update * 1000).toLocaleTimeString();
     }
 
-    // Proxy-explain: a human-readable status line with live countdown.
-    // We stash the latest snapshot so a 1-second ticker can keep the countdown
-    // decrementing smoothly even between /api/status polls.
     window.__lastSnap = d;
     renderProxyExplain();
 
@@ -570,8 +824,8 @@ async function poll() {
     // Gauges
     renderLinearGauge('gauge-util-v', g.utility_v, v.utilityVoltageV || 0);
     renderLinearGauge('gauge-batt', g.battery_v, v.batteryVoltageV || 0);
-    renderLinearGauge('gauge-ctrl-temp', g.controller_temp_f, v.controllerTempF || 0);
-    renderLinearGauge('gauge-oil-temp', g.oil_temp_f, v.oilTempF || 0);
+    renderLinearGauge('gauge-ctrl-temp', g.controller_temp_f, v.controllerTempF || 0, { isTemp: true });
+    renderLinearGauge('gauge-oil-temp', g.oil_temp_f, v.oilTempF || 0, { isTemp: true });
 
     // Utility Hz
     const utilHz = v.utilityFrequencyHz || 0;
@@ -594,10 +848,18 @@ async function poll() {
       genHzEl.className = 'val ' + colorForHz(genHz, g.frequency_hz);
     }
 
+    // Push to per-gauge history buffers and refresh any visible charts
+    METRICS.forEach(m => {
+      pushMetric(m.id, v[m.key]);
+      if (document.getElementById('chart-' + m.id)?.classList.contains('show')) {
+        renderGaugeChart(m);
+      }
+    });
+
     // Hours
-    document.getElementById('total-op-hours').textContent = v.totalOperationHours != null ? v.totalOperationHours.toFixed(1) : '—';
-    document.getElementById('total-rt-hours').textContent = v.totalRuntimeHours != null ? v.totalRuntimeHours.toFixed(1) : '—';
-    document.getElementById('maint-hours').textContent = v.maintHoursSinceLast != null ? v.maintHoursSinceLast.toFixed(1) : '—';
+    document.getElementById('total-op-hours').textContent = fmtHours(v.totalOperationHours);
+    document.getElementById('total-rt-hours').textContent = fmtHours(v.totalRuntimeHours);
+    document.getElementById('maint-hours').textContent = fmtHours(v.maintHoursSinceLast);
 
     // Oil warning
     const oilWarn = document.getElementById('oil-warning');
@@ -612,14 +874,14 @@ async function poll() {
     const eventsEl = document.getElementById('events');
     if (d.events && d.events.length > 0) {
       eventsEl.innerHTML = d.events.map(e => `<div><span class="ev-ts">${e.ts}</span>${e.msg}</div>`).join('');
+    } else {
+      eventsEl.innerHTML = '<span class="ev-empty">No events recorded yet.</span>';
     }
 
-    // ── Dashboard view updates ───────────────────────────────────────────
+    // ── Network Diagnostics view updates ────────────────────────────────
     if (currentView === 'dashboard') {
       const dc = d.dash_current || {};
-      const dh = d.dash_history || [];
 
-      // Pi health
       if (dc.pi) {
         const t = dc.pi.cpu_temp_c;
         const tEl = document.getElementById('d-pi-temp');
@@ -633,7 +895,6 @@ async function poll() {
         dEl.textContent = df != null ? `${df.toFixed(1)}G/${dt2.toFixed(1)}G` : '—';
       }
 
-      // Charts
       if (chartsInitialized && dc.eth0 && dc.eth1) {
         const e0 = dc.eth0, e1 = dc.eth1;
         const ts = dc.ts || '';
@@ -648,7 +909,6 @@ async function poll() {
         setErr('d-e0-rx-drop',e0.rx_dropped); setErr('d-e0-crc',e0.crc_errors);
       }
 
-      // Switch
       if (dc.switch && dc.switch.ts) {
         setErr('d-sw-rx-err', dc.switch['RX Total Error (MAC)'] || 0);
         setErr('d-sw-tx-err', dc.switch['TX Total Error'] || 0);
@@ -659,7 +919,6 @@ async function poll() {
           `collisions:${dc.switch['TX Total Collision']||0} jabbers:${dc.switch['RX Jabbers Received']||0} age:${swAge}s`;
       }
 
-      // Decoded telemetry
       if (d.decoded && d.decoded.length > 0) {
         document.getElementById('d-decoded-body').innerHTML = d.decoded.map(r =>
           `<tr><td>${r.name}</td><td style="font-family:monospace;color:#7a8494;font-size:11px">${r.id_hex}</td><td style="text-align:right;font-family:monospace;font-weight:600">${typeof r.value==='number'?(Math.abs(r.value)>1e9?r.value.toExponential(3):r.value.toLocaleString()):r.value}</td><td>${r.units}</td></tr>`
@@ -673,15 +932,16 @@ async function poll() {
   setTimeout(poll, POLL_MS);
 }
 
-// Render the human-readable proxy-status line. Uses window.__lastSnap so the
-// 1-second ticker can decrement the countdown even between API polls.
+async function resetOilCheck() {
+  await fetch('/api/reset-oil-check', { method: 'POST' });
+}
+
 function renderProxyExplain() {
   const el = document.getElementById('proxy-explain');
   if (!el) return;
   const d = window.__lastSnap;
   if (!d) { el.textContent = 'Starting…'; return; }
   const mode = d.proxy_mode || 'startup';
-  // Client-computed countdown from the server-provided stable-since timestamp.
   let remaining = null;
   if (d.internet_stable_since && d.stable_threshold_s) {
     const elapsed = (Date.now() / 1000) - d.internet_stable_since;
@@ -710,9 +970,10 @@ function renderProxyExplain() {
   }
 }
 
-// Tick the countdown every second (independent of the 2s API poll).
 setInterval(renderProxyExplain, 1000);
 
+// Honor initial chart-visibility setting on first paint
+applyChartVisibility();
 poll();
 </script>
 </body>
