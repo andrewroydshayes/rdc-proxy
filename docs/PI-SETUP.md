@@ -540,11 +540,61 @@ Scroll down on the dashboard. You should see live gauges for:
 
 Numbers update every 1–2 seconds. If they're populating, **it works**.
 
+> **Don't panic if some gauges still say "No Data" here** — that's expected.
+> See [10d](#10d-understanding-the-no-data-indicator) below for what that
+> means and why it's normal.
+
 ### 10c. Check the real Kohler cloud still sees the generator
 
 Open the Kohler/Rehlko app on your phone. Your generator should still show
 "online" and report the same values as the Pi's dashboard. This confirms the
 Pi is truly transparent — Kohler doesn't know it's there.
+
+### 10d. Understanding the "No Data" indicator
+
+Every gauge and value on the dashboard has two possible states:
+
+- **A real reading** — a number, with the needle in its band.
+- **"No Data"** — a red X across the gauge and a red "NO DATA" badge in the
+  middle.
+
+The distinction matters because **zero is ambiguous**. Without the No Data
+indicator, a gauge showing "0.0 V" could mean either "the battery really is
+0 V" (bad) or "the Pi hasn't heard that value yet" (totally fine). The
+dashboard separates the two so you can tell at a glance.
+
+**On fresh startup every field begins in "No Data"** and stays there until
+the RDC actually sends that value. You'll typically see the dashboard light
+up field-by-field over a few seconds to a minute as telemetry streams in.
+This is normal — not a bug.
+
+**Some fields only arrive in certain generator modes:**
+
+| Field | When it's populated |
+|---|---|
+| Battery voltage, utility voltage, controller temp | All modes, continuously |
+| Engine RPM, generator voltage, generator frequency | Only while the engine is running or exercising — stays "No Data" in standby |
+| Oil temperature | Primarily during/after a run; may clear to "No Data" after the engine cools |
+| Total runtime hours, total operation hours | Refreshed periodically; may briefly show "No Data" between refreshes |
+
+**Some fields transmit less often than others.** The RDC streams fields at
+different cadences — fast (every 1–2 seconds) for voltage/frequency, slower
+for counters like runtime hours. If a field is silent for longer than the
+**staleness threshold** (default 45 seconds), the dashboard flips that
+field alone to "No Data" while the rest keep updating normally. This is
+how you can tell a specific sensor has gone quiet even though the link
+overall is healthy.
+
+**Tuning the threshold.** Click the ⚙ gear → **Proxy & Network** →
+**Stale Data Threshold**. The default (45 s) works for most generators;
+bump it up to 120 s or more if you find counters flickering in and out of
+"No Data" during normal operation.
+
+**When "No Data" means trouble:** if the whole dashboard — every gauge and
+value — flips to "No Data" and stays there for more than a minute or two
+while the RDC is still showing `connected` in the top strip, something's
+wrong with the proxy's ingest path. Check `sudo journalctl -u rdc-proxy -f`
+on the Pi.
 
 ---
 
@@ -586,6 +636,28 @@ sudo apt-get update && sudo apt-get full-upgrade -y && sudo reboot
 ```
 
 Wait 2 minutes after the reboot finishes, SSH back in, and retry the installer.
+
+### Every gauge says "No Data"
+
+This is the **normal startup state** — the Pi hasn't heard from the RDC
+yet. Wait 30–60 seconds after wiring in. Fields should light up one by
+one as the RDC sends each value. If after 2 minutes *every* gauge is still
+"No Data" but the top strip shows `RDC: connected`, see
+[10d](#10d-understanding-the-no-data-indicator) for context and check
+`sudo journalctl -u rdc-proxy -f` for ingest errors.
+
+### One gauge says "No Data" but others are updating fine
+
+That's the indicator working as designed. That specific field hasn't been
+refreshed in the last 45 seconds (the staleness threshold). Common causes:
+
+- **RPM, generator voltage, generator frequency** stay "No Data" in
+  standby — they're only sent while the engine is running or exercising.
+- **Runtime hours counters** can tick slowly; if they flicker in and out
+  of "No Data" during normal operation, raise the threshold under ⚙ →
+  Proxy & Network → Stale Data Threshold (try 120 s).
+- **A specific sensor genuinely stopped reporting** — check the RDC's own
+  display for any alarm codes.
 
 ### Dashboard shows "RDC: disconnected" after wiring in
 

@@ -168,6 +168,9 @@
   /* ── Linear Gauge ─────────────────────────────────── */
   .gauge-linear {
     margin: 8px 0;
+    /* Reserve enough height for the no-data overlay before the gauge
+       has been populated by the first poll (label row + track + margin). */
+    min-height: 46px;
   }
   .gauge-linear .gauge-label {
     display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;
@@ -398,6 +401,36 @@
   #pi-strip .val { color: var(--text-soft); }
   #pi-strip .warn { color: var(--color-amber); font-weight: 600; }
   #pi-strip .crit { color: var(--color-red-bright); font-weight: 600; }
+
+  /* ── No-data overlay ─────────────────────────────── */
+  /* Any container tagged .nd-wrap gets a red-X + "No Data" badge
+     rendered over it when .no-data is also set. Content underneath
+     is dimmed so the overlay reads clearly. */
+  .nd-wrap { position: relative; }
+  .nd-wrap.no-data > *:not(.nd-overlay) { opacity: 0.22; }
+  .nd-overlay {
+    position: absolute; inset: 0;
+    display: none; align-items: center; justify-content: center;
+    pointer-events: none; z-index: 2; overflow: hidden;
+  }
+  .nd-wrap.no-data > .nd-overlay { display: flex; }
+  .nd-overlay svg {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+  }
+  .nd-overlay svg line {
+    stroke: var(--color-red);
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+    opacity: 0.85;
+  }
+  .nd-overlay .nd-label {
+    background: var(--bg-panel); color: var(--color-red);
+    border: 1.5px solid var(--color-red); border-radius: 4px;
+    padding: 2px 10px; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.8px; text-transform: uppercase;
+    font-family: 'SF Mono', Consolas, monospace;
+    position: relative; z-index: 3;
+  }
 </style>
 </head>
 <body>
@@ -425,7 +458,7 @@
     &nbsp;&middot;&nbsp; Internet: <span id="inet-status">—</span>
     &nbsp;&middot;&nbsp; Updated: <span id="last-update" class="on">—</span>
   </div>
-  <div class="version">rdc-proxy v<span id="version">—</span></div>
+  <div class="version">rdc-proxy v<span id="version">—</span> &nbsp;&middot;&nbsp; dashboard v{{ dashboard_version }}</div>
 </div>
 
 <div id="proxy-explain">Starting…</div>
@@ -452,19 +485,19 @@
   <!-- Utility / Generator Voltage -->
   <div class="card" id="voltage-card">
     <h3>Voltage</h3>
-    <div id="gauge-util-v" class="gauge-linear"></div>
-    <div id="gauge-gen-v" class="gauge-linear" style="display:none;"></div>
+    <div id="gauge-util-v" class="gauge-linear nd-wrap"></div>
+    <div id="gauge-gen-v" class="gauge-linear nd-wrap" style="display:none;"></div>
     <div class="gauge-chart" id="chart-util-v"><canvas></canvas></div>
   </div>
 
   <!-- Frequency -->
   <div class="card" id="freq-card">
     <h3>Frequency</h3>
-    <div id="num-util-hz" class="num-display">
+    <div id="num-util-hz" class="num-display nd-wrap">
       <span class="name">Utility</span>
       <span class="val" id="util-hz-val">—</span>
     </div>
-    <div id="num-gen-hz" class="num-display" style="display:none;">
+    <div id="num-gen-hz" class="num-display nd-wrap" style="display:none;">
       <span class="name">Generator</span>
       <span class="val" id="gen-hz-val">—</span>
     </div>
@@ -474,23 +507,23 @@
   <!-- Battery -->
   <div class="card">
     <h3>Battery</h3>
-    <div id="gauge-batt" class="gauge-linear"></div>
+    <div id="gauge-batt" class="gauge-linear nd-wrap"></div>
     <div class="gauge-chart" id="chart-batt"><canvas></canvas></div>
   </div>
 
   <!-- Temperatures -->
   <div class="card">
     <h3>Temperatures</h3>
-    <div id="gauge-ctrl-temp" class="gauge-linear"></div>
+    <div id="gauge-ctrl-temp" class="gauge-linear nd-wrap"></div>
     <div class="gauge-chart" id="chart-ctrl-temp"><canvas></canvas></div>
-    <div id="gauge-oil-temp" class="gauge-linear"></div>
+    <div id="gauge-oil-temp" class="gauge-linear nd-wrap"></div>
     <div class="gauge-chart" id="chart-oil-temp"><canvas></canvas></div>
   </div>
 
   <!-- RPM (shown during exercise/running) -->
   <div class="card" id="rpm-card" style="display:none;">
     <h3>Engine Speed</h3>
-    <div class="gauge-circular">
+    <div class="gauge-circular nd-wrap" id="rpm-gauge-wrap">
       <svg viewBox="0 0 200 120" id="rpm-svg">
         <path id="rpm-band-red-lo" d="" fill="none" stroke="#e05252" stroke-width="14" opacity="0.25"/>
         <path id="rpm-band-yellow-lo" d="" fill="none" stroke="#e3a34c" stroke-width="14" opacity="0.25"/>
@@ -508,15 +541,15 @@
   <!-- Hours -->
   <div class="card">
     <h3>Hours</h3>
-    <div class="num-display">
+    <div class="num-display nd-wrap" id="row-total-op-hours">
       <span class="name">Total Operation</span>
       <span class="val" id="total-op-hours">—</span>
     </div>
-    <div class="num-display">
+    <div class="num-display nd-wrap" id="row-total-rt-hours">
       <span class="name">Total Runtime</span>
       <span class="val" id="total-rt-hours">—</span>
     </div>
-    <div class="num-display">
+    <div class="num-display nd-wrap" id="row-maint-hours">
       <span class="name">Since Maintenance</span>
       <span class="val" id="maint-hours">—</span>
     </div>
@@ -679,6 +712,14 @@
           </label>
           <input type="number" id="s-oil-hours" min="1" max="500" step="1">
         </div>
+
+        <div class="setting-row">
+          <label>
+            Stale Data Threshold (seconds)
+            <span class="hint">A telemetry field silent for this long is shown as "No Data" (default 45)</span>
+          </label>
+          <input type="number" id="s-stale-seconds" min="5" max="600" step="5">
+        </div>
       </div>
 
       <!-- ── Gauge Thresholds ────────────────────────────────── -->
@@ -810,6 +851,7 @@ function openSettings() {
     document.getElementById('s-check-interval').value  = c.internet_check_interval_s ?? 30;
     document.getElementById('s-stable-threshold').value = c.internet_stable_before_proxy_s ?? 300;
     document.getElementById('s-oil-hours').value       = c.oil_check_runtime_hours ?? 24;
+    document.getElementById('s-stale-seconds').value   = c.stale_seconds ?? 45;
     renderGaugeTable(c.gauges || {});
   }).catch(() => {
     SERVER_CFG = {};
@@ -892,6 +934,7 @@ async function saveSettings() {
     internet_check_interval_s: parseInt(document.getElementById('s-check-interval').value || 30, 10),
     internet_stable_before_proxy_s: parseInt(document.getElementById('s-stable-threshold').value || 300, 10),
     oil_check_runtime_hours: parseInt(document.getElementById('s-oil-hours').value || 24, 10),
+    stale_seconds: parseInt(document.getElementById('s-stale-seconds').value || 45, 10),
     gauges: collectGaugeTable(),
   };
   try {
@@ -1066,6 +1109,10 @@ function renderLinearGauge(containerId, cfg, value, opts = {}) {
   const unit = asC ? '°C' : (cfg.unit || '');
   const label = cfg.label || '';
 
+  // Keep the overlay inside the gauge div on every rebuild so the
+  // no-data X is on top of the dimmed bands/label.
+  el.classList.add('nd-wrap');
+  el.classList.toggle('no-data', dispValue == null);
   el.innerHTML = `
     <div class="gauge-label">
       <span class="name">${label}</span>
@@ -1078,7 +1125,8 @@ function renderLinearGauge(containerId, cfg, value, opts = {}) {
       <div class="gauge-band band-yellow" style="left:${pct(green[1])}%;width:${pct(yellow[1])-pct(green[1])}%"></div>
       <div class="gauge-band band-red" style="left:${pct(yellow[1])}%;width:${100-pct(yellow[1])}%"></div>
       ${dispValue != null ? `<div class="gauge-needle" style="left:${pct(dispValue)}%"></div>` : ''}
-    </div>`;
+    </div>
+    ${ND_OVERLAY_HTML}`;
 }
 
 function arcPath(cx, cy, r, startAngle, endAngle) {
@@ -1141,6 +1189,42 @@ function fmtDuration(secs) {
 }
 
 function fmtHours(v) { return v != null ? `${v.toFixed(1)} hrs` : '—'; }
+
+// ── No-Data overlay helpers ──────────────────────────────────────────────────
+// hasValue — legit numeric/string reading, not null/undefined/NaN.
+function hasValue(x) { return x != null && !(typeof x === 'number' && isNaN(x)); }
+
+// ND_OVERLAY_HTML — reused inside gauge-linear innerHTML rebuilds so the
+// overlay survives each render.
+const ND_OVERLAY_HTML =
+  '<div class="nd-overlay">' +
+    '<svg viewBox="0 0 100 100" preserveAspectRatio="none">' +
+      '<line x1="0" y1="0" x2="100" y2="100"/>' +
+      '<line x1="100" y1="0" x2="0" y2="100"/>' +
+    '</svg>' +
+    '<span class="nd-label">No Data</span>' +
+  '</div>';
+
+// Walk every .nd-wrap at load time and inject the overlay if missing.
+// Start every field in the no-data state so the dashboard says "No Data"
+// the instant it opens, before the first /api/status response arrives.
+// Each field leaves no-data on the first poll that actually carries a
+// fresh value for it, and re-enters if the server later prunes it.
+function installNoDataOverlays() {
+  document.querySelectorAll('.nd-wrap').forEach(el => {
+    if (!el.querySelector('.nd-overlay')) {
+      el.insertAdjacentHTML('beforeend', ND_OVERLAY_HTML);
+    }
+    el.classList.add('no-data');
+  });
+}
+installNoDataOverlays();
+
+function setNoData(id, missing) {
+  const el = typeof id === 'string' ? document.getElementById(id) : id;
+  if (!el) return;
+  el.classList.toggle('no-data', !!missing);
+}
 
 // ── Polling ──────────────────────────────────────────────────────────────────
 
@@ -1207,17 +1291,19 @@ async function poll() {
       gt.style.display = 'none';
     }
 
-    // Gauges
-    renderLinearGauge('gauge-util-v', g.utility_v, v.utilityVoltageV || 0);
-    renderLinearGauge('gauge-batt', g.battery_v, v.batteryVoltageV || 0);
-    renderLinearGauge('gauge-ctrl-temp', g.controller_temp_f, v.controllerTempF || 0, { isTemp: true });
-    renderLinearGauge('gauge-oil-temp', g.oil_temp_f, v.oilTempF || 0, { isTemp: true });
+    // Gauges — pass raw value (undefined/null triggers the gauge's
+    // internal no-data overlay rather than showing a bogus 0).
+    renderLinearGauge('gauge-util-v', g.utility_v, v.utilityVoltageV);
+    renderLinearGauge('gauge-batt', g.battery_v, v.batteryVoltageV);
+    renderLinearGauge('gauge-ctrl-temp', g.controller_temp_f, v.controllerTempF, { isTemp: true });
+    renderLinearGauge('gauge-oil-temp', g.oil_temp_f, v.oilTempF, { isTemp: true });
 
     // Utility Hz
-    const utilHz = v.utilityFrequencyHz || 0;
+    const utilHz = v.utilityFrequencyHz;
     const utilHzEl = document.getElementById('util-hz-val');
-    utilHzEl.textContent = utilHz ? utilHz.toFixed(1) + ' Hz' : '—';
-    utilHzEl.className = 'val ' + colorForHz(utilHz, g.utility_hz);
+    setNoData('num-util-hz', !hasValue(utilHz));
+    utilHzEl.textContent = hasValue(utilHz) ? utilHz.toFixed(1) + ' Hz' : '—';
+    utilHzEl.className = 'val ' + (hasValue(utilHz) ? colorForHz(utilHz, g.utility_hz) : '');
 
     // Exercise/Running elements
     const showEngine = (mode === 'exercise' || mode === 'running');
@@ -1226,12 +1312,15 @@ async function poll() {
     document.getElementById('num-gen-hz').style.display = showEngine ? 'flex' : 'none';
 
     if (showEngine) {
-      renderRpmGauge(v.engineSpeedRpm || 0, g.rpm);
-      renderLinearGauge('gauge-gen-v', g.generator_v, v.generatorVoltageV || 0);
-      const genHz = v.engineFrequencyHz || 0;
+      const rpm = v.engineSpeedRpm;
+      setNoData('rpm-gauge-wrap', !hasValue(rpm));
+      renderRpmGauge(hasValue(rpm) ? rpm : 0, g.rpm);
+      renderLinearGauge('gauge-gen-v', g.generator_v, v.generatorVoltageV);
+      const genHz = v.engineFrequencyHz;
       const genHzEl = document.getElementById('gen-hz-val');
-      genHzEl.textContent = genHz ? genHz.toFixed(1) + ' Hz' : '—';
-      genHzEl.className = 'val ' + colorForHz(genHz, g.frequency_hz);
+      setNoData('num-gen-hz', !hasValue(genHz));
+      genHzEl.textContent = hasValue(genHz) ? genHz.toFixed(1) + ' Hz' : '—';
+      genHzEl.className = 'val ' + (hasValue(genHz) ? colorForHz(genHz, g.frequency_hz) : '');
     }
 
     // Push to per-gauge history buffers and refresh any visible charts
@@ -1243,9 +1332,12 @@ async function poll() {
     });
 
     // Hours
+    setNoData('row-total-op-hours', !hasValue(v.totalOperationHours));
+    setNoData('row-total-rt-hours', !hasValue(v.totalRuntimeHours));
+    setNoData('row-maint-hours',    !hasValue(v.maintHoursSinceLast));
     document.getElementById('total-op-hours').textContent = fmtHours(v.totalOperationHours);
     document.getElementById('total-rt-hours').textContent = fmtHours(v.totalRuntimeHours);
-    document.getElementById('maint-hours').textContent = fmtHours(v.maintHoursSinceLast);
+    document.getElementById('maint-hours').textContent    = fmtHours(v.maintHoursSinceLast);
 
     // Oil warning
     const oilWarn = document.getElementById('oil-warning');

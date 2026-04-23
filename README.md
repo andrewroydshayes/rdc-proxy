@@ -14,7 +14,11 @@ local-only dashboard.
 - In **LOCAL mode** (no internet) it replays a captured cloud handshake so the
   RDC keeps streaming to the Pi instead of faulting.
 - Serves a dashboard at `http://<pi>/` with engine state, voltages, frequency,
-  runtime hours, utility loss events, and interface counters.
+  runtime hours, utility loss events, and interface counters. Every value has
+  a per-field **"No Data"** indicator (red X + badge) so zero readings can't
+  be confused with "haven't heard yet" — see
+  [PI-SETUP §10d](docs/PI-SETUP.md#10d-understanding-the-no-data-indicator)
+  for why some fields (RPM, generator voltage) show "No Data" in standby.
 
 ## ⚠️ Use at your own risk
 

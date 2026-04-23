@@ -19,7 +19,10 @@ app = Flask(
 
 @app.route("/")
 def index():
-    return render_template("status.html")
+    # dashboard_version is baked into the served HTML. If the user's browser
+    # has a stale cached copy, the dashboard version shown in the UI will
+    # lag behind the /api/status version — an immediate visible tell.
+    return render_template("status.html", dashboard_version=__version__)
 
 
 @app.route("/api/status")
@@ -45,6 +48,7 @@ _SETTABLE = {
     "internet_stable_before_proxy_s",
     "internet_check_interval_s",
     "oil_check_runtime_hours",
+    "stale_seconds",
     "rdc_ip",
     "cloud_dns",
 }

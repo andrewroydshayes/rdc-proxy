@@ -22,6 +22,10 @@ class GeneratorState:
     def __init__(self):
         self.lock = threading.Lock()
         self.values = {}
+        # Per-field "last refreshed" timestamps. Used by snapshot() to prune
+        # stale fields before handing them to the dashboard, so one silent
+        # field (e.g. oil temp) shows "No Data" while the rest keep updating.
+        self.value_timestamps = {}
         self.last_update = 0.0
         self.proxy_mode = "startup"
         self.cloud_ip = None
@@ -49,8 +53,10 @@ class GeneratorState:
         with self.lock:
             old = self.values.get(name)
             prev_engine_mode = self._display_mode()
+            now = time.time()
             self.values[name] = value
-            self.last_update = time.time()
+            self.value_timestamps[name] = now
+            self.last_update = now
 
             if name == "utilityVoltageV" and value < 10 and old and old > 100:
                 self.gen_started_at = datetime.now()
@@ -103,17 +109,43 @@ class GeneratorState:
     def snapshot(self):
         with self.lock:
             mode = self._display_mode()
-            vals = dict(self.values)
-            oil_temp_c = vals.get("lubeOilTempC", 0) or 0
-            ctrl_temp_c = vals.get("controllerTempC", 0) or 0
-            vals["oilTempF"] = round(oil_temp_c * 9 / 5 + 32, 1) if oil_temp_c else 0
-            vals["controllerTempF"] = round(ctrl_temp_c * 9 / 5 + 32, 1) if ctrl_temp_c else 0
+            now = time.time()
+
+            # Prune per-field: if this value hasn't been refreshed within
+            # stale_seconds, drop it from the snapshot. The dashboard reads
+            # "missing key" as "No Data" and shows the red-X overlay on
+            # just that field; unrelated fields keep updating normally.
+            # Pick a single threshold that works for every field — longer
+            # than the slowest normal refresh cadence but short enough that
+            # a silent RDC is flagged promptly. 45s is the default; tune
+            # via config key "stale_seconds".
+            stale_after = CFG.get("stale_seconds", 45)
+            fresh_vals = {
+                k: v for k, v in self.values.items()
+                if (ts := self.value_timestamps.get(k)) is not None
+                and (now - ts) <= stale_after
+            }
+
+            # Derived Fahrenheit temps — only emit when the Celsius source
+            # is still fresh. Omitting them triggers the dashboard's
+            # per-field no-data overlay.
+            oil_c = fresh_vals.get("lubeOilTempC")
+            ctrl_c = fresh_vals.get("controllerTempC")
+            if oil_c is not None:
+                fresh_vals["oilTempF"] = round(oil_c * 9 / 5 + 32, 1)
+            if ctrl_c is not None:
+                fresh_vals["controllerTempF"] = round(ctrl_c * 9 / 5 + 32, 1)
+
+            vals = fresh_vals
 
             gen_duration = None
             if self.gen_started_at:
                 gen_duration = (datetime.now() - self.gen_started_at).total_seconds()
 
-            runtime = vals.get("totalRuntimeHours", 0) or 0
+            # Oil-check logic reads from the *last-seen* runtime (not the
+            # pruned snapshot) so a stale hours reading doesn't accidentally
+            # reset the oil-check warning state.
+            runtime = self.values.get("totalRuntimeHours", 0) or 0
             oil_runtime_since_check = runtime - self.oil_check_runtime_start
             oil_warn = oil_runtime_since_check >= CFG.get("oil_check_runtime_hours", 24)
 

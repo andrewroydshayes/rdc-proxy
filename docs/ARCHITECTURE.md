@@ -35,7 +35,10 @@ rdc_proxy/
 ├── wire.py         # TLV decoder. Pure / stateless. Import target for the
 │                   # kohler_corr correlation tool and any future consumers.
 ├── state.py        # GeneratorState singleton (STATE), HANDSHAKE persistence.
-│                   # Thread-safe. Central data model.
+│                   # Thread-safe. Central data model. Tracks a per-field
+│                   # last-update timestamp; snapshot() prunes values older
+│                   # than stale_seconds so the dashboard renders each
+│                   # silent field as "No Data" without affecting the rest.
 ├── proxy.py        # Asyncio TCP server, PROXY/LOCAL/WAITING mode logic,
 │                   # internet_monitor(), read_exactly + forward_and_tap.
 ├── dashboard.py    # /sys/class/net/ iface counters + /proc/loadavg + thermal.
