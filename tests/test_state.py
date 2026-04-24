@@ -119,3 +119,99 @@ def test_handshake_have_requires_greeting_and_config(reset_handshake):
     assert have_handshake() is False
     HANDSHAKE["config_msg"] = b"y" * 36
     assert have_handshake() is True
+
+
+# ── Per-mode stale pruning ─────────────────────────────────────────────────
+
+def test_snapshot_uses_per_mode_threshold(fresh_state, isolated_cfg):
+    # controllerTempC threshold in standby = 1800; exercise = 120. Age it
+    # to 200s and verify it's kept in standby, pruned in exercise.
+    import time
+    fresh_state.update("controllerTempC", 55.0)
+    fresh_state.value_timestamps["controllerTempC"] = time.time() - 200
+
+    # standby mode (engine off, utility OK)
+    fresh_state.update("utilityVoltageV", 240.0)
+    fresh_state.update("engineSpeedRpm", 0)
+    assert "controllerTempC" in fresh_state.snapshot()["values"]
+
+    # exercise mode (engine on, utility OK)
+    fresh_state.update("engineSpeedRpm", 3600)
+    fresh_state.value_timestamps["controllerTempC"] = time.time() - 200  # re-age after engineSpeedRpm update
+    snap = fresh_state.snapshot()
+    assert snap["mode"] == "exercise"
+    assert "controllerTempC" not in snap["values"]
+
+
+def test_engine_gated_field_pruned_in_standby(fresh_state, isolated_cfg):
+    # engineSpeedRpm has no 'standby' entry in STALE_THRESHOLDS_DEFAULTS.
+    # Its value should be pruned in standby regardless of freshness.
+    fresh_state.update("utilityVoltageV", 240.0)
+    fresh_state.update("engineSpeedRpm", 0)  # just updated, but...
+    snap = fresh_state.snapshot()
+    assert snap["mode"] == "standby"
+    assert "engineSpeedRpm" not in snap["values"]
+
+
+def test_engine_gated_field_visible_in_exercise(fresh_state, isolated_cfg):
+    fresh_state.update("utilityVoltageV", 240.0)
+    fresh_state.update("engineSpeedRpm", 3600)
+    snap = fresh_state.snapshot()
+    assert snap["mode"] == "exercise"
+    assert snap["values"]["engineSpeedRpm"] == 3600
+
+
+def test_snapshot_exposes_visibility_for_current_mode(fresh_state, isolated_cfg):
+    fresh_state.update("utilityVoltageV", 240.0)
+    fresh_state.update("engineSpeedRpm", 0)
+    snap = fresh_state.snapshot()
+    # standby hides engine-gated fields by default
+    assert snap["visibility"].get("engineSpeedRpm") is False
+    # exercise/running defaults not in standby dict → absent here
+    assert "totalRuntimeHours" in snap["visibility"]
+
+
+def test_snapshot_visibility_switches_with_mode(fresh_state, isolated_cfg):
+    fresh_state.update("utilityVoltageV", 240.0)
+    fresh_state.update("engineSpeedRpm", 3600)
+    snap = fresh_state.snapshot()
+    assert snap["mode"] == "exercise"
+    # exercise mode visibility defaults are empty → snapshot exposes empty dict
+    assert snap["visibility"] == {}
+
+
+def test_stale_threshold_fallback_for_unknown_field(fresh_state, isolated_cfg):
+    # A field NOT in stale_thresholds → uses global stale_seconds fallback.
+    import time
+    isolated_cfg["stale_seconds"] = 10
+    fresh_state.update("utilityVoltageV", 240.0)
+    fresh_state.update("someCustomField", 42)
+    # 5s old → fresh
+    fresh_state.value_timestamps["someCustomField"] = time.time() - 5
+    assert "someCustomField" in fresh_state.snapshot()["values"]
+    # 20s old → stale
+    fresh_state.value_timestamps["someCustomField"] = time.time() - 20
+    assert "someCustomField" not in fresh_state.snapshot()["values"]
+
+
+def test_sticky_threshold_never_prunes(fresh_state, isolated_cfg):
+    # modelCode is configured with -1 (sticky) in every mode. Even an
+    # hour-old value should still appear in the snapshot.
+    import time
+    fresh_state.update("utilityVoltageV", 240.0)
+    fresh_state.update("modelCode", "CH1000")
+    fresh_state.value_timestamps["modelCode"] = time.time() - 3600
+    snap = fresh_state.snapshot()
+    assert snap["values"]["modelCode"] == "CH1000"
+
+
+def test_sticky_threshold_custom_field(fresh_state, isolated_cfg):
+    # User can mark any field as sticky via -1.
+    import time
+    isolated_cfg["stale_thresholds"]["customStickyField"] = {
+        "standby": -1, "exercise": -1, "running": -1,
+    }
+    fresh_state.update("utilityVoltageV", 240.0)
+    fresh_state.update("customStickyField", "once")
+    fresh_state.value_timestamps["customStickyField"] = time.time() - 99999
+    assert fresh_state.snapshot()["values"]["customStickyField"] == "once"

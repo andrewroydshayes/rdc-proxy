@@ -111,19 +111,37 @@ class GeneratorState:
             mode = self._display_mode()
             now = time.time()
 
-            # Prune per-field: if this value hasn't been refreshed within
-            # stale_seconds, drop it from the snapshot. The dashboard reads
-            # "missing key" as "No Data" and shows the red-X overlay on
-            # just that field; unrelated fields keep updating normally.
-            # Pick a single threshold that works for every field — longer
-            # than the slowest normal refresh cadence but short enough that
-            # a silent RDC is flagged promptly. 45s is the default; tune
-            # via config key "stale_seconds".
-            stale_after = CFG.get("stale_seconds", 45)
+            # Per-field staleness pruning, mode-aware. Three-valued logic per
+            # (field, mode):
+            #   1. missing entry        → field is not emitted in this mode
+            #                             (engine-gated); always pruned
+            #   2. threshold == -1      → sticky; once we've seen a value,
+            #                             never prune it in this mode
+            #   3. threshold >  0       → normal: prune if age exceeds it
+            # Unknown fields (no stale_thresholds entry at all) fall back to
+            # the global stale_seconds integer — same as before.
+            fallback = CFG.get("stale_seconds", 45)
+            thresholds = CFG.get("stale_thresholds", {})
+
+            def _threshold(field):
+                per_mode = thresholds.get(field)
+                if per_mode is None:
+                    return fallback
+                # Absence for THIS mode → always stale (engine-gated).
+                return per_mode.get(mode, 0)
+
+            def _is_fresh(field, ts):
+                t = _threshold(field)
+                if t == -1:
+                    return True   # sticky — never stale
+                if t <= 0:
+                    return False  # engine-gated or invalid
+                return (now - ts) <= t
+
             fresh_vals = {
                 k: v for k, v in self.values.items()
                 if (ts := self.value_timestamps.get(k)) is not None
-                and (now - ts) <= stale_after
+                and _is_fresh(k, ts)
             }
 
             # Derived Fahrenheit temps — only emit when the Celsius source
@@ -155,9 +173,15 @@ class GeneratorState:
                 elapsed = time.time() - self.internet_stable_since
                 seconds_to_stable = max(0, int(stable_threshold_s - elapsed))
 
+            # Per-mode visibility flags for the CURRENT mode, so the client
+            # doesn't have to know all three mode sub-dicts. Fields missing
+            # from the dict default to True (shown).
+            visibility = CFG.get("visibility", {}).get(mode, {})
+
             return {
                 "mode": mode,
                 "values": vals,
+                "visibility": visibility,
                 "proxy_mode": self.proxy_mode,
                 "cloud_ip": self.cloud_ip,
                 "cloud_connected": self.cloud_connected,

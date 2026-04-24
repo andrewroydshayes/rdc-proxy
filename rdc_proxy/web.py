@@ -58,11 +58,75 @@ _SETTABLE = {
 _GAUGE_FIELDS = {"min", "max", "green", "yellow", "unit", "label"}
 
 
+_MODES = {"standby", "exercise", "running"}
+
+
+def _merge_field_x_mode(live, patch, *, coerce):
+    """Merge {field: {mode: value}} patches into CFG's live dict. `null`
+    values *delete* that mode entry — used by the Fields UI to mark a
+    field as "not emitted in this mode" (engine-gated). `coerce(v)`
+    normalizes user input (int/float for thresholds). Returns merged delta."""
+    merged = {}
+    for field, per_mode in (patch or {}).items():
+        if not isinstance(per_mode, dict):
+            continue
+        target = live.setdefault(field, {})
+        wrote = False
+        for mode, val in per_mode.items():
+            if mode not in _MODES:
+                continue
+            if val is None:
+                if mode in target:
+                    del target[mode]
+                    wrote = True
+                continue
+            try:
+                target[mode] = coerce(val)
+                wrote = True
+            except (TypeError, ValueError):
+                continue
+        if wrote:
+            merged[field] = dict(target)
+    return merged
+
+
+def _merge_mode_x_field(live, patch, *, coerce):
+    """Merge {mode: {field: value}} patches (visibility shape). `null`
+    deletes the field from that mode's visibility map (falls back to
+    default True)."""
+    merged = {}
+    for mode, fields in (patch or {}).items():
+        if mode not in _MODES or not isinstance(fields, dict):
+            continue
+        target = live.setdefault(mode, {})
+        wrote = False
+        for field, val in fields.items():
+            if val is None:
+                if field in target:
+                    del target[field]
+                    wrote = True
+                continue
+            try:
+                target[field] = coerce(val)
+                wrote = True
+            except (TypeError, ValueError):
+                continue
+        if wrote:
+            merged[mode] = dict(target)
+    return merged
+
+
 @app.route("/api/config", methods=["GET", "POST"])
 def api_config():
     if request.method == "GET":
         out = {k: CFG.get(k) for k in _SETTABLE}
         out["gauges"] = {k: dict(v) for k, v in CFG.get("gauges", {}).items()}
+        out["stale_thresholds"] = {
+            k: dict(v) for k, v in CFG.get("stale_thresholds", {}).items()
+        }
+        out["visibility"] = {
+            k: dict(v) for k, v in CFG.get("visibility", {}).items()
+        }
         return jsonify(out)
     data = request.get_json(silent=True) or {}
     updated = {}
@@ -82,6 +146,21 @@ def api_config():
                     merged[gname] = dict(gauges[gname])
             if merged:
                 updated["gauges"] = merged
+        elif k == "stale_thresholds" and isinstance(v, dict):
+            live = CFG.setdefault("stale_thresholds", {})
+            # Accept -1 (sticky sentinel) or a positive second count. Anything
+            # else gets clamped to >= 1 to avoid bogus zero-or-negative inputs.
+            def _coerce_threshold(x):
+                n = int(x)
+                return -1 if n == -1 else max(1, n)
+            merged = _merge_field_x_mode(live, v, coerce=_coerce_threshold)
+            if merged:
+                updated["stale_thresholds"] = merged
+        elif k == "visibility" and isinstance(v, dict):
+            live = CFG.setdefault("visibility", {})
+            merged = _merge_mode_x_field(live, v, coerce=bool)
+            if merged:
+                updated["visibility"] = merged
         elif k in _SETTABLE:
             CFG[k] = v
             updated[k] = v

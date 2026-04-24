@@ -353,6 +353,31 @@
   .gauge-hint {
     color: var(--text-dim); font-size: 11px; margin-top: 8px; font-style: italic;
   }
+
+  /* Per-field matrix: visibility + stale threshold, per mode */
+  .fields-table {
+    width: 100%; border-collapse: collapse; font-size: 11px;
+    font-family: 'SF Mono', Consolas, monospace;
+  }
+  .fields-table th {
+    padding: 6px 4px; color: var(--text-muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: .5px; font-size: 9px;
+    border-bottom: 1px solid var(--border); text-align: center;
+  }
+  .fields-table th.gauge-name-col { text-align: left; padding-left: 8px; }
+  .fields-table tbody td { padding: 4px; border-bottom: 1px solid var(--border-faint); text-align: center; }
+  .fields-table tbody tr:last-child td { border-bottom: none; }
+  .fields-table td.g-name { text-align: left; color: var(--text); white-space: nowrap; padding-left: 8px; }
+  .fields-table input[type="number"] {
+    background: var(--bg-input); color: var(--text); border: 1px solid var(--border-strong);
+    border-radius: 3px; padding: 3px 4px; font-family: inherit; font-size: 11px;
+    width: 62px; text-align: right;
+  }
+  .fields-table input[type="number"]:placeholder-shown { border-style: dashed; opacity: 0.6; }
+  .fields-table input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; vertical-align: middle; }
+  .fields-table th.mode-standby,  .fields-table td.mode-standby  { background: color-mix(in srgb, var(--chip-neutral-bg) 40%, transparent); }
+  .fields-table th.mode-exercise, .fields-table td.mode-exercise { background: color-mix(in srgb, var(--chip-yellow-bg)  40%, transparent); }
+  .fields-table th.mode-running,  .fields-table td.mode-running  { background: color-mix(in srgb, var(--chip-red-bg)     40%, transparent); }
   .settings-footer {
     margin-top: 18px; display: flex; justify-content: flex-end; gap: 10px;
     padding-top: 14px; border-top: 1px solid var(--border);
@@ -486,7 +511,7 @@
   <div class="card" id="voltage-card">
     <h3>Voltage</h3>
     <div id="gauge-util-v" class="gauge-linear nd-wrap"></div>
-    <div id="gauge-gen-v" class="gauge-linear nd-wrap" style="display:none;"></div>
+    <div id="gauge-gen-v" class="gauge-linear nd-wrap"></div>
     <div class="gauge-chart" id="chart-util-v"><canvas></canvas></div>
   </div>
 
@@ -497,7 +522,7 @@
       <span class="name">Utility</span>
       <span class="val" id="util-hz-val">—</span>
     </div>
-    <div id="num-gen-hz" class="num-display nd-wrap" style="display:none;">
+    <div id="num-gen-hz" class="num-display nd-wrap">
       <span class="name">Generator</span>
       <span class="val" id="gen-hz-val">—</span>
     </div>
@@ -520,8 +545,8 @@
     <div class="gauge-chart" id="chart-oil-temp"><canvas></canvas></div>
   </div>
 
-  <!-- RPM (shown during exercise/running) -->
-  <div class="card" id="rpm-card" style="display:none;">
+  <!-- RPM (visibility controlled by the snapshot's visibility flags) -->
+  <div class="card" id="rpm-card">
     <h3>Engine Speed</h3>
     <div class="gauge-circular nd-wrap" id="rpm-gauge-wrap">
       <svg viewBox="0 0 200 120" id="rpm-svg">
@@ -625,6 +650,7 @@
       <button class="tab active" data-panel="panel-display" onclick="showPanel(this)">Display</button>
       <button class="tab" data-panel="panel-proxy" onclick="showPanel(this)">Proxy &amp; Network</button>
       <button class="tab" data-panel="panel-gauges" onclick="showPanel(this)">Gauge Thresholds</button>
+      <button class="tab" data-panel="panel-fields" onclick="showPanel(this)">Fields</button>
     </div>
 
     <div class="settings-body">
@@ -746,6 +772,32 @@
         </div>
       </div>
 
+      <!-- ── Fields (per-mode visibility + stale timeouts) ─────── -->
+      <div class="tab-panel" id="panel-fields">
+        <table class="fields-table">
+          <thead>
+            <tr>
+              <th class="gauge-name-col" rowspan="2">Field</th>
+              <th class="mode-standby"  colspan="2">Standby</th>
+              <th class="mode-exercise" colspan="2">Exercise</th>
+              <th class="mode-running"  colspan="2">Running</th>
+            </tr>
+            <tr>
+              <th class="mode-standby">Show</th>  <th class="mode-standby">Stale (s)</th>
+              <th class="mode-exercise">Show</th> <th class="mode-exercise">Stale (s)</th>
+              <th class="mode-running">Show</th>  <th class="mode-running">Stale (s)</th>
+            </tr>
+          </thead>
+          <tbody id="fields-table-body"></tbody>
+        </table>
+        <div class="gauge-hint">
+          <b>Empty Stale</b> = field not emitted in this mode (engine-gated — pruned from snapshot regardless of freshness).
+          <b>-1</b> = sticky: once received, never goes stale (good for one-time session-header fields like modelCode / serialNumber / loadShed_*).
+          Any positive number = timeout in seconds.
+          <b>Unchecking Show</b> hides the dashboard element even when the underlying data is flowing.
+        </div>
+      </div>
+
     </div>
 
     <div class="settings-footer">
@@ -853,9 +905,11 @@ function openSettings() {
     document.getElementById('s-oil-hours').value       = c.oil_check_runtime_hours ?? 24;
     document.getElementById('s-stale-seconds').value   = c.stale_seconds ?? 45;
     renderGaugeTable(c.gauges || {});
+    renderFieldsTable(c.stale_thresholds || {}, c.visibility || {});
   }).catch(() => {
     SERVER_CFG = {};
     renderGaugeTable({});
+    renderFieldsTable({}, {});
   });
 
   document.getElementById('settings-overlay').classList.add('show');
@@ -890,6 +944,86 @@ function renderGaugeTable(gauges) {
     `;
     body.appendChild(row);
   }
+}
+
+// ── Fields tab: per-mode visibility + stale-threshold matrix ────────────────
+const FIELDS_MODES = ['standby', 'exercise', 'running'];
+
+// Only fields with a dashboard element make sense in the matrix — the
+// rest (_2/_3/_B phase duplicates, heartbeat, session-header) have no
+// UI to show or hide. They remain in the server config; power users can
+// tune them via /etc/rdc-proxy/config.json.
+function renderFieldsTable(staleThresholds, visibility) {
+  const body = document.getElementById('fields-table-body');
+  body.innerHTML = '';
+
+  // Matrix rows = fields that have a FIELD_CONTAINERS entry (i.e. a
+  // dashboard element that visibility/threshold actually controls).
+  const candidates = new Set(Object.keys(FIELD_CONTAINERS));
+  const fields = [...candidates].filter(
+    f => staleThresholds[f] !== undefined || FIELDS_MODES.some(m => (visibility[m] || {})[f] !== undefined)
+  );
+  // Fallback: if nothing in config matches yet (first run), show all
+  // UI-backed fields anyway so users aren't stuck with an empty table.
+  if (!fields.length) fields.push(...candidates);
+
+  for (const field of fields.sort()) {
+    const row = document.createElement('tr');
+    row.dataset.field = field;
+    let cells = `<td class="g-name">${field}</td>`;
+    for (const mode of FIELDS_MODES) {
+      const t = (staleThresholds[field] || {})[mode];
+      const hasThreshold = (t !== undefined && t !== null);
+      const visEntry = (visibility[mode] || {})[field];
+      const shown = visEntry !== false;
+      cells += `
+        <td class="mode-${mode}">
+          <input type="checkbox" data-mode="${mode}" data-col="vis" ${shown ? 'checked' : ''}>
+        </td>
+        <td class="mode-${mode}">
+          <input type="number" data-mode="${mode}" data-col="thresh" min="-1" max="86400" step="1"
+                 value="${hasThreshold ? t : ''}" placeholder="—"
+                 title="-1 = sticky (never stale); empty = engine-gated (always pruned)">
+        </td>
+      `;
+    }
+    row.innerHTML = cells;
+    body.appendChild(row);
+  }
+
+  // Convenience: checking Show on a mode that currently has no Stale
+  // value auto-fills 30 (s). "I want to see it" without a threshold is
+  // inconsistent — we default to a reasonable standby-ish value; the
+  // user can edit after. Unchecking does not clear the threshold.
+  body.querySelectorAll('input[data-col="vis"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (!cb.checked) return;
+      const mode = cb.dataset.mode;
+      const threshInput = cb.closest('tr').querySelector(
+        `input[data-mode="${mode}"][data-col="thresh"]`
+      );
+      if (threshInput && threshInput.value.trim() === '') threshInput.value = 30;
+    });
+  });
+}
+
+// Return { stale_thresholds: {field: {mode: int | null}}, visibility: {mode: {field: bool}} }.
+// Empty threshold input → null, which tells the server to DELETE that (field, mode)
+// entry (effectively engine-gating the field in that mode).
+function collectFieldsTable() {
+  const st = {};
+  const vis = { standby: {}, exercise: {}, running: {} };
+  document.querySelectorAll('#fields-table-body tr').forEach(row => {
+    const field = row.dataset.field;
+    for (const mode of FIELDS_MODES) {
+      const cb = row.querySelector(`[data-mode="${mode}"][data-col="vis"]`);
+      const th = row.querySelector(`[data-mode="${mode}"][data-col="thresh"]`);
+      vis[mode][field] = !!cb.checked;
+      const raw = th.value.trim();
+      (st[field] ||= {})[mode] = (raw === '') ? null : parseInt(raw, 10);
+    }
+  });
+  return { stale_thresholds: st, visibility: vis };
 }
 
 function collectGaugeTable() {
@@ -928,6 +1062,7 @@ async function saveSettings() {
   if (resolvedTheme() !== prevTheme) applyTheme();
 
   // Server-side (/api/config)
+  const fields = collectFieldsTable();
   const payload = {
     rdc_ip: document.getElementById('s-rdc-ip').value.trim(),
     cloud_dns: document.getElementById('s-cloud-dns').value.trim(),
@@ -936,6 +1071,8 @@ async function saveSettings() {
     oil_check_runtime_hours: parseInt(document.getElementById('s-oil-hours').value || 24, 10),
     stale_seconds: parseInt(document.getElementById('s-stale-seconds').value || 45, 10),
     gauges: collectGaugeTable(),
+    stale_thresholds: fields.stale_thresholds,
+    visibility: fields.visibility,
   };
   try {
     await fetch('/api/config', {
@@ -1226,6 +1363,37 @@ function setNoData(id, missing) {
   el.classList.toggle('no-data', !!missing);
 }
 
+// Map backing telemetry field → the DOM container that represents it on
+// the dashboard. Containers not in this map are unaffected by visibility.
+const FIELD_CONTAINERS = {
+  utilityVoltageV:     'gauge-util-v',
+  batteryVoltageV:     'gauge-batt',
+  controllerTempC:     'gauge-ctrl-temp',
+  lubeOilTempC:        'gauge-oil-temp',
+  utilityFrequencyHz:  'num-util-hz',
+  generatorVoltageV:   'gauge-gen-v',
+  engineFrequencyHz:   'num-gen-hz',
+  engineSpeedRpm:      'rpm-card',
+  totalOperationHours: 'row-total-op-hours',
+  totalRuntimeHours:   'row-total-rt-hours',
+  maintHoursSinceLast: 'row-maint-hours',
+};
+
+// Apply {field: bool} visibility from the snapshot. False → hide the
+// container (no gauge, no No-Data overlay). Missing/true → restore CSS
+// default display (removing any inline override we added).
+function applyFieldVisibility(vis) {
+  for (const [field, containerId] of Object.entries(FIELD_CONTAINERS)) {
+    const el = document.getElementById(containerId);
+    if (!el) continue;
+    if (vis[field] === false) {
+      el.style.display = 'none';
+    } else {
+      el.style.removeProperty('display');
+    }
+  }
+}
+
 // ── Polling ──────────────────────────────────────────────────────────────────
 
 async function poll() {
@@ -1305,23 +1473,25 @@ async function poll() {
     utilHzEl.textContent = hasValue(utilHz) ? utilHz.toFixed(1) + ' Hz' : '—';
     utilHzEl.className = 'val ' + (hasValue(utilHz) ? colorForHz(utilHz, g.utility_hz) : '');
 
-    // Exercise/Running elements
-    const showEngine = (mode === 'exercise' || mode === 'running');
-    document.getElementById('rpm-card').style.display = showEngine ? 'block' : 'none';
-    document.getElementById('gauge-gen-v').style.display = showEngine ? 'block' : 'none';
-    document.getElementById('num-gen-hz').style.display = showEngine ? 'flex' : 'none';
+    // Per-mode visibility: hide containers the user unchecked, show the
+    // rest. Every engine-related renderer runs unconditionally — if the
+    // field's Show is unchecked, applyFieldVisibility hides the container;
+    // if it's checked but the value is missing (engine-gated / stale),
+    // the No-Data overlay handles it. No more showEngine short-circuit.
+    const vis = d.visibility || {};
+    applyFieldVisibility(vis);
 
-    if (showEngine) {
-      const rpm = v.engineSpeedRpm;
-      setNoData('rpm-gauge-wrap', !hasValue(rpm));
-      renderRpmGauge(hasValue(rpm) ? rpm : 0, g.rpm);
-      renderLinearGauge('gauge-gen-v', g.generator_v, v.generatorVoltageV);
-      const genHz = v.engineFrequencyHz;
-      const genHzEl = document.getElementById('gen-hz-val');
-      setNoData('num-gen-hz', !hasValue(genHz));
-      genHzEl.textContent = hasValue(genHz) ? genHz.toFixed(1) + ' Hz' : '—';
-      genHzEl.className = 'val ' + (hasValue(genHz) ? colorForHz(genHz, g.frequency_hz) : '');
-    }
+    renderLinearGauge('gauge-gen-v', g.generator_v, v.generatorVoltageV);
+
+    const rpm = v.engineSpeedRpm;
+    setNoData('rpm-gauge-wrap', !hasValue(rpm));
+    renderRpmGauge(hasValue(rpm) ? rpm : 0, g.rpm);
+
+    const genHz = v.engineFrequencyHz;
+    const genHzEl = document.getElementById('gen-hz-val');
+    setNoData('num-gen-hz', !hasValue(genHz));
+    genHzEl.textContent = hasValue(genHz) ? genHz.toFixed(1) + ' Hz' : '—';
+    genHzEl.className = 'val ' + (hasValue(genHz) ? colorForHz(genHz, g.frequency_hz) : '');
 
     // Push to per-gauge history buffers and refresh any visible charts
     METRICS.forEach(m => {
