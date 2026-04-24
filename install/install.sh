@@ -183,11 +183,82 @@ else
   ok "$CONFIG_DIR/rdc-proxy.env already exists (preserved)"
 fi
 
+# ── Pick the second bridge member ──────────────────────────────────────────
+# setup-bridge.sh puts eth0 + a second Ethernet interface into br0. On a Pi
+# with a USB→Ethernet adapter, the second interface is *usually* named eth1,
+# but Debian/systemd can hand it a predictable-MAC-based name (enx<mac>),
+# or a platform-specific name like usb0. Hardcoding "eth1" silently produces
+# a half-assembled bridge. Detect candidates and, if there's only one,
+# pick it; if there are multiple, prompt; if there are none, error out.
+#
+# Override: set SECOND_IFACE=<name> in the environment to skip detection.
+if [[ -z "${SECOND_IFACE:-}" ]]; then
+  CANDIDATES=()
+  for path in /sys/class/net/*; do
+    iface=$(basename "$path")
+    [[ "$iface" == "lo" || "$iface" == "eth0" ]] && continue
+    [[ "$iface" == br* ]] && continue                  # bridge itself
+    [[ -d "$path/wireless" ]] && continue              # wifi
+    [[ -d "$path/bridge" ]] && continue               # is a bridge
+    # skip virtual/tunnel types
+    case "$iface" in
+      veth*|docker*|tap*|tun*|ppp*|vxlan*|wg*|tailscale*|zt*|cni*|flannel*) continue ;;
+    esac
+    # must be ethernet (type 1)
+    [[ "$(cat "$path/type" 2>/dev/null)" == "1" ]] || continue
+    CANDIDATES+=("$iface")
+  done
+
+  if [[ ${#CANDIDATES[@]} -eq 0 ]]; then
+    fail "no second Ethernet interface found besides eth0"
+    echo
+    echo "${R}The USB→Ethernet adapter isn't showing up. Plug it in and re-run,${N}"
+    echo "${R}or pass SECOND_IFACE=<name> if it's named something non-standard.${N}"
+    echo "Current interfaces:"
+    ip -br link
+    exit 1
+  elif [[ ${#CANDIDATES[@]} -eq 1 ]]; then
+    SECOND_IFACE="${CANDIDATES[0]}"
+    ok "second bridge member: $SECOND_IFACE (auto-detected)"
+  else
+    # Multiple candidates — let the user pick. /dev/tty works even when
+    # the script itself was piped in from `curl`.
+    echo
+    echo "${Y}Multiple Ethernet interfaces found besides eth0.${N}"
+    echo "Which one is the adapter connected to your switch?"
+    echo
+    for i in "${!CANDIDATES[@]}"; do
+      iface="${CANDIDATES[$i]}"
+      mac=$(cat "/sys/class/net/$iface/address" 2>/dev/null || echo "?")
+      carrier=$(cat "/sys/class/net/$iface/carrier" 2>/dev/null || echo "0")
+      link_state=$([[ "$carrier" == "1" ]] && echo "${G}link up${N}" || echo "${Y}no carrier${N}")
+      echo "  $((i+1))) $iface  (mac $mac, $link_state)"
+    done
+    echo
+    if [[ -e /dev/tty ]]; then
+      while true; do
+        read -r -p "Enter the number [1-${#CANDIDATES[@]}]: " choice < /dev/tty
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#CANDIDATES[@]} )); then
+          SECOND_IFACE="${CANDIDATES[$((choice-1))]}"
+          break
+        fi
+        echo "${R}Invalid choice. Enter a number between 1 and ${#CANDIDATES[@]}.${N}"
+      done
+      ok "second bridge member: $SECOND_IFACE (selected)"
+    else
+      fail "no TTY available for prompt — re-run with SECOND_IFACE=<name>"
+      exit 1
+    fi
+  fi
+fi
+
+export MEMBERS="eth0 $SECOND_IFACE"
+
 # ── Bridge ─────────────────────────────────────────────────────────────────
 # Heads-up: if the user is SSH'd in on an interface that's about to become a
 # bridge member, their session will die (bridge members lose their own IPs).
 # Only warn when that's actually the case — wifi/other-iface SSH is fine.
-BRIDGE_MEMBERS=${MEMBERS:-eth0 eth1}
+BRIDGE_MEMBERS="$MEMBERS"
 SSH_DYING_IFACE=""
 SSH_DYING_IP=""
 if [[ -n "${SSH_CONNECTION:-}" ]]; then
@@ -233,13 +304,12 @@ WARN
   printf "\r%60s\r\n" ""
 fi
 
-step "6/8  bridge (br0 over eth0+eth1)"
-if ip link show br0 >/dev/null 2>&1; then
-  ok "br0 already exists"
-else
-  bash "$INSTALL_DIR/install/setup-bridge.sh"
-  ok "br0 configured via setup-bridge.sh"
-fi
+step "6/8  bridge (br0 over $MEMBERS)"
+# Always run setup-bridge.sh — it's idempotent and we need it to re-run
+# whenever the second bridge member might have changed (e.g. earlier
+# install picked the wrong iface, or USB adapter was replaced).
+bash "$INSTALL_DIR/install/setup-bridge.sh"
+ok "br0 configured via setup-bridge.sh (members: $MEMBERS)"
 
 # ── Install systemd unit ───────────────────────────────────────────────────
 step "7/8  systemd unit"

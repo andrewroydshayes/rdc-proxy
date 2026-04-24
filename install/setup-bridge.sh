@@ -47,9 +47,15 @@ EOF
   # 2. If NetworkManager is present, tell it not to manage our ports/bridge
   if systemctl is-active --quiet NetworkManager; then
     mkdir -p /etc/NetworkManager/conf.d
+    # Build the unmanaged-devices list from the actual bridge members
+    # (so USB adapters named enx<mac> or usb0 get excluded too).
+    nm_list="interface-name:${BRIDGE_NAME}"
+    for m in $MEMBERS; do
+      nm_list="${nm_list};interface-name:${m}"
+    done
     cat > /etc/NetworkManager/conf.d/unmanaged-bridge.conf <<EOF
 [keyfile]
-unmanaged-devices=interface-name:${BRIDGE_NAME};interface-name:eth0;interface-name:eth1
+unmanaged-devices=${nm_list}
 EOF
     systemctl reload NetworkManager || true
   fi
