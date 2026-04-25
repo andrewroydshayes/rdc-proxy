@@ -102,13 +102,24 @@ jobs:
               ssh_authorized_keys:
                 - $(cat "$VMDIR/id.pub")
           ssh_pwauth: false
-          # The Debian Bookworm cloud image is minimal — git isn't
-          # preinstalled, but we need it before install.sh runs (the
-          # repo bootstrap step pre-stages source as a local git repo
-          # so install.sh's clone step can use it as REPO_URL).
+          # The Debian Bookworm cloud image is minimal. Pre-install
+          # everything install.sh would otherwise apt-get during its
+          # own run — under TCG (no KVM on hosted ARM runners) each
+          # apt operation costs minutes, and install.sh's apt step
+          # alone was blowing the 45-min job budget. With these
+          # pre-installed cloud-init-side, install.sh's apt step is
+          # a no-op and the run completes in ~5 min instead of >45.
           package_update: true
           packages:
             - git
+            - python3
+            - python3-pip
+            - python3-venv
+            - python3-flask
+            - iptables
+            - ebtables
+            - tcpdump
+            - bridge-utils
           # net.ifnames=0 alone isn't enough on aarch64 cloud-init — we
           # rewrite netplan to use eth0 explicitly so the installer's
           # hardcoded eth0/eth1 names work.
