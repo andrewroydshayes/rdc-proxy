@@ -194,10 +194,19 @@ jobs:
           scp -i "$VMDIR/id" -P 2222 \
               -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
               /tmp/rdc-src.tar.gz pi@127.0.0.1:/tmp/
+          # Explicit apt install instead of relying on cloud-init's `packages:`
+          # — cloud-init may still be mid-apt at the moment we connect, and
+          # racing it has caused this step to fail with `git: command not
+          # found`. Wait for the apt lock first, then install git ourselves.
           ssh -i "$VMDIR/id" -p 2222 \
               -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
               pi@127.0.0.1 bash -s <<'REMOTE'
           set -euo pipefail
+          for i in $(seq 1 60); do
+            sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+            echo "waiting for dpkg lock..."; sleep 5
+          done
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git >/dev/null
           rm -rf /tmp/repo-source
           mkdir -p /tmp/repo-source
           tar -xzf /tmp/rdc-src.tar.gz -C /tmp/repo-source
