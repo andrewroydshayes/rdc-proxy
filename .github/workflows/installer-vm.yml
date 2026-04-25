@@ -132,9 +132,12 @@ jobs:
           runcmd:
             - [ systemctl, enable, --now, ssh ]
             - [ update-initramfs, -u ]
-          power_state:
-            mode: reboot
-            condition: True
+            # One-shot guarded reboot: only runs the first time (when the
+            # marker is absent). After the rename takes effect on second
+            # boot, the marker exists and the reboot is skipped.
+            # power_state: reboot is unsuitable here — cloud-init re-runs
+            # the final stage on the next boot and would loop forever.
+            - [ sh, -c, 'test -f /var/lib/rdc-vm-rebooted || (touch /var/lib/rdc-vm-rebooted && reboot)' ]
           EOF
           echo 'instance-id: rdc-test-001' > "$VMDIR/meta-data"
           echo 'local-hostname: rdc-test' >> "$VMDIR/meta-data"
