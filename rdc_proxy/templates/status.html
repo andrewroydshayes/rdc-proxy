@@ -374,6 +374,12 @@
     width: 62px; text-align: right;
   }
   .fields-table input[type="number"]:placeholder-shown { border-style: dashed; opacity: 0.6; }
+  .fields-toolbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+  .fields-toolbar button {
+    padding: 5px 12px; font-size: 12px; border-radius: 5px; cursor: pointer;
+    border: 1px solid var(--border-strong); background: var(--chip-neutral-bg); color: var(--text);
+    font-family: 'SF Mono', Consolas, monospace;
+  }
   .fields-table input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; vertical-align: middle; }
   .fields-table th.mode-standby,  .fields-table td.mode-standby  { background: color-mix(in srgb, var(--chip-neutral-bg) 40%, transparent); }
   .fields-table th.mode-exercise, .fields-table td.mode-exercise { background: color-mix(in srgb, var(--chip-yellow-bg)  40%, transparent); }
@@ -774,6 +780,9 @@
 
       <!-- ── Fields (per-mode visibility + stale timeouts) ─────── -->
       <div class="tab-panel" id="panel-fields">
+        <div class="fields-toolbar">
+          <button type="button" onclick="restoreFieldsDefaults()" title="Reset Show + Stale columns to built-in defaults (still requires Save to commit)">Restore Defaults</button>
+        </div>
         <table class="fields-table">
           <thead>
             <tr>
@@ -883,6 +892,10 @@ function rebuildAllCharts() {
 // expose (e.g. unit/label already in CFG).
 let SERVER_CFG = {};
 
+// Built-in defaults for the Fields tab, fetched alongside config so the
+// "Restore Defaults" button can re-render the table without another round-trip.
+let FIELDS_DEFAULTS = { stale_thresholds: {}, visibility: {} };
+
 function showPanel(btn) {
   document.querySelectorAll('.settings-tabs .tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -904,10 +917,15 @@ function openSettings() {
     document.getElementById('s-stable-threshold').value = c.internet_stable_before_proxy_s ?? 300;
     document.getElementById('s-oil-hours').value       = c.oil_check_runtime_hours ?? 24;
     document.getElementById('s-stale-seconds').value   = c.stale_seconds ?? 45;
+    FIELDS_DEFAULTS = {
+      stale_thresholds: c.default_stale_thresholds || {},
+      visibility: c.default_visibility || {},
+    };
     renderGaugeTable(c.gauges || {});
     renderFieldsTable(c.stale_thresholds || {}, c.visibility || {});
   }).catch(() => {
     SERVER_CFG = {};
+    FIELDS_DEFAULTS = { stale_thresholds: {}, visibility: {} };
     renderGaugeTable({});
     renderFieldsTable({}, {});
   });
@@ -1005,6 +1023,10 @@ function renderFieldsTable(staleThresholds, visibility) {
       if (threshInput && threshInput.value.trim() === '') threshInput.value = 30;
     });
   });
+}
+
+function restoreFieldsDefaults() {
+  renderFieldsTable(FIELDS_DEFAULTS.stale_thresholds, FIELDS_DEFAULTS.visibility);
 }
 
 // Return { stale_thresholds: {field: {mode: int | null}}, visibility: {mode: {field: bool}} }.

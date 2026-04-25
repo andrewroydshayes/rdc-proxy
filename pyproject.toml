@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rdc-proxy"
-version = "0.4.3"
+version = "0.4.4"
 description = "Transparent TCP proxy for the Kohler RDC2 generator controller — decodes telemetry, survives Kohler/Rehlko cloud outages."
 readme = "README.md"
 requires-python = ">=3.10"

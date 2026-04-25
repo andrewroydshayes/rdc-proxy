@@ -5,7 +5,12 @@ import os
 from flask import Flask, jsonify, render_template, request
 
 from rdc_proxy import __version__
-from rdc_proxy.config import CFG, save_config
+from rdc_proxy.config import (
+    CFG,
+    STALE_THRESHOLDS_DEFAULTS,
+    VISIBILITY_DEFAULTS,
+    save_config,
+)
 from rdc_proxy.dashboard import get_dashboard_state, snapshot_decoded
 from rdc_proxy.state import STATE
 
@@ -126,6 +131,12 @@ def api_config():
         }
         out["visibility"] = {
             k: dict(v) for k, v in CFG.get("visibility", {}).items()
+        }
+        out["default_stale_thresholds"] = {
+            k: dict(v) for k, v in STALE_THRESHOLDS_DEFAULTS.items()
+        }
+        out["default_visibility"] = {
+            k: dict(v) for k, v in VISIBILITY_DEFAULTS.items()
         }
         return jsonify(out)
     data = request.get_json(silent=True) or {}
