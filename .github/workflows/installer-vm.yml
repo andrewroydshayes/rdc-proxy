@@ -206,6 +206,7 @@ jobs:
             sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
             echo "waiting for dpkg lock..."; sleep 5
           done
+          sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git >/dev/null
           rm -rf /tmp/repo-source
           mkdir -p /tmp/repo-source
