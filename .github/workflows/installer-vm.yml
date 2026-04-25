@@ -202,11 +202,15 @@ jobs:
               -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
               pi@127.0.0.1 bash -s <<'REMOTE'
           set -euo pipefail
-          for i in $(seq 1 60); do
-            sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
-            echo "waiting for dpkg lock..."; sleep 5
-          done
-          sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null
+          # Wait for cloud-init to fully finish — it holds apt locks during
+          # its package install phase. cloud-init status --wait blocks until
+          # done state, returning 0 on success / 2 on disabled / non-zero on
+          # error. After that, all apt locks are released and our explicit
+          # install (which the cloud-init `packages:` should have done, but
+          # may have failed silently) is guaranteed to be the only writer.
+          sudo cloud-init status --wait >/dev/null 2>&1 || true
+          # If cloud-init's `packages:` already installed git, the next
+          # install is a no-op. If not, this catches it.
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git >/dev/null
           rm -rf /tmp/repo-source
           mkdir -p /tmp/repo-source
