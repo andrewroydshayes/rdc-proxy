@@ -14,18 +14,10 @@ name: Installer VM (full)
 # Slow lane — complement to .github/workflows/installer-smoke.yml (fast lane).
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'install/**'
-      - 'rdc_proxy/doctor.py'
-      - '.github/workflows/installer-vm.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'install/**'
-      - 'rdc_proxy/doctor.py'
-      - '.github/workflows/installer-vm.yml'
+  # Currently disabled on PR/push while iterating on TCG-vs-bridge-takeover
+  # quirks in the qemu+user-mode-NAT topology. Run manually via "Run workflow"
+  # in the Actions tab, or wait for the daily cron. The fast-lane workflow
+  # (installer-smoke.yml) gates PRs on shellcheck + doctor logic.
   schedule:
     - cron: '0 11 * * *'   # 11:00 UTC daily
   workflow_dispatch:
