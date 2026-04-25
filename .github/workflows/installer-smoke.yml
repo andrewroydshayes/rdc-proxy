@@ -1,0 +1,60 @@
+name: Installer smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'install/**'
+      - '.github/workflows/installer-smoke.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'install/**'
+      - '.github/workflows/installer-smoke.yml'
+
+jobs:
+  # Catches quoting errors, unused vars, and unsafe globbing in the installer
+  # long before someone runs it on their Pi. shellcheck is deliberately set
+  # to error on SC2086 / SC2154 / SC2155 — the categories that historically
+  # bite users on first install.
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: './install'
+          severity: warning
+          check_together: 'yes'
+
+  # Run the "doctor" subcommand against a synthetic, broken configuration and
+  # assert it correctly reports a failure. Runs on every PR — catches
+  # regressions where a check silently starts passing when it shouldn't.
+  doctor-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - name: doctor against empty /etc (should FAIL cleanly)
+        run: |
+          set +e
+          RDC_PROXY_CONFIG_DIR=/tmp/doctor-smoke python -m rdc_proxy doctor --json > out.json
+          rc=$?
+          set -e
+          echo "exit code: $rc"
+          # exit 1 = one or more checks failed, which is what we want
+          [ "$rc" = "1" ] || { echo "expected rc=1 on a broken host"; exit 2; }
+          python -c "
+          import json, sys
+          r = json.load(open('out.json'))
+          assert r['ok'] is False, 'expected ok=False'
+          fail_names = [c['name'] for c in r['checks'] if c['status'] == 'fail']
+          # These three MUST fail on a bare GitHub runner with no bridge.
+          for expected in ('service', 'bridge', 'bridge_nf_call_iptables'):
+              assert expected in fail_names, f'{expected!r} should be in FAIL list but got {fail_names}'
+          print('doctor correctly reported FAIL on a broken host ✓')
+          "

@@ -1,7 +1,13 @@
-"""Entry point: assembles all the pieces and runs the asyncio loop."""
+"""Entry point: assembles all the pieces and runs the asyncio loop.
+
+`rdc-proxy`         → run the proxy (default, systemd entrypoint)
+`rdc-proxy doctor`  → run post-install diagnostics (read-only, no side effects)
+`rdc-proxy doctor --json`  → machine-readable output for support tooling
+"""
 
 import asyncio
 import os
+import sys
 import threading
 
 from rdc_proxy.config import CFG, load_config
@@ -43,6 +49,11 @@ async def main():
 
 
 def cli():
+    # Subcommand dispatch. Keep the bare `rdc-proxy` → proxy behavior intact
+    # so the systemd unit (ExecStart=... -m rdc_proxy) doesn't need to change.
+    if len(sys.argv) >= 2 and sys.argv[1] == "doctor":
+        from rdc_proxy import doctor
+        sys.exit(doctor.main(sys.argv[2:]))
     asyncio.run(main())
 
 
