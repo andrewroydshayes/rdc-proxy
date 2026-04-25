@@ -34,7 +34,7 @@ jobs:
   vm:
     # ARM64 runner so qemu-system-aarch64 runs with KVM (free for public repos).
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 25
+    timeout-minutes: 45
 
     env:
       VMDIR: /tmp/rdc-vm
@@ -51,11 +51,19 @@ jobs:
           sudo apt-get install -y -qq qemu-system-arm qemu-utils \
             cloud-image-utils ovmf jq netcat-openbsd
 
-      - name: KVM sanity
+      - name: Detect virtualization mode
+        id: virt
         run: |
-          test -e /dev/kvm && echo "/dev/kvm OK"
-          ls -la /dev/kvm
-          sudo chmod 666 /dev/kvm
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            echo "accel=kvm -cpu host" >> "$GITHUB_OUTPUT"
+            echo "/dev/kvm OK — using KVM"
+          else
+            # TCG-on-aarch64-host is slow but functional. cortex-a72 is the
+            # Pi-4 CPU model, gives us a known-good guest CPU profile.
+            echo "accel=tcg,thread=multi -cpu cortex-a72" >> "$GITHUB_OUTPUT"
+            echo "no /dev/kvm — falling back to TCG (slower)"
+          fi
           qemu-system-aarch64 --version | head -1
 
       - name: Cache Debian Bookworm aarch64 image
@@ -127,8 +135,9 @@ jobs:
 
       - name: Boot VM (daemonized, serial -> log)
         run: |
+          # accel + cpu chosen above based on /dev/kvm presence.
           qemu-system-aarch64 \
-            -M virt -accel kvm -cpu host -smp 2 -m 2048 \
+            -M virt -accel ${{ steps.virt.outputs.accel }} -smp 2 -m 2048 \
             -drive if=pflash,format=raw,readonly=on,file="$VMDIR/efi_code.fd" \
             -drive if=pflash,format=raw,file="$VMDIR/efi_vars.fd" \
             -drive if=virtio,format=qcow2,file="$VMDIR/disk.qcow2" \
