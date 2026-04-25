@@ -150,23 +150,30 @@ jobs:
             -device virtio-net-pci,netdev=gen,mac=52:54:00:12:34:57
 
       - name: Wait for ssh (cloud-init reboots once for net.ifnames)
-        timeout-minutes: 6
+        timeout-minutes: 15
         run: |
           # cloud-init's `power_state: reboot` at the end of first boot
-          # means we'll see ssh come up, drop, and come up again. Wait
-          # for the *second* up state by sleeping past the reboot window.
-          for i in $(seq 1 60); do
-            nc -z 127.0.0.1 2222 && echo "ssh up (try $i)" && break
-            sleep 5
+          # means ssh comes up, drops, and comes up again. Don't guess the
+          # sleep window — TCG is slow and variable. Instead, poll until
+          # /proc/uptime reports the VM has been up > 90s, which guarantees
+          # we're past the cloud-init reboot.
+          SSHCMD="ssh -i $VMDIR/id -p 2222 -o StrictHostKeyChecking=no \
+                  -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -o ServerAliveInterval=5 \
+                  pi@127.0.0.1"
+          stable_uptime=90
+          deadline=$(( $(date +%s) + 14*60 ))
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            up=$($SSHCMD 'cut -d. -f1 /proc/uptime' 2>/dev/null || echo "")
+            if [ -n "$up" ] && [ "$up" -ge "$stable_uptime" ] 2>/dev/null; then
+              echo "VM stable: uptime=${up}s"
+              exit 0
+            fi
+            echo "waiting for stable VM (uptime=${up:-unreachable})"
+            sleep 10
           done
-          echo "first ssh window seen; sleeping through cloud-init reboot..."
-          sleep 30
-          for i in $(seq 1 60); do
-            ssh -i "$VMDIR/id" -p 2222 \
-                -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-                -o ConnectTimeout=3 pi@127.0.0.1 'echo READY' 2>/dev/null && break
-            sleep 5
-          done
+          echo "timed out waiting for VM to stabilise"
+          tail -200 "$VMDIR/serial.log"
+          exit 1
 
       - name: Probe VM
         run: |
