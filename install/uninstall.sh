@@ -183,7 +183,10 @@ step "3/6  bridge config files"
 # the NM unmanaged.conf is the persistent change; br0 itself drops at next
 # reboot or when the user runs `networkctl reload && networkctl down br0`.
 removed_any=0
-for f in /etc/systemd/network/10-br0.netdev \
+for f in /etc/systemd/network/05-rdc-proxy-br0.netdev \
+         /etc/systemd/network/05-rdc-proxy-br0-members.network \
+         /etc/systemd/network/05-rdc-proxy-br0.network \
+         /etc/systemd/network/10-br0.netdev \
          /etc/systemd/network/20-br0-members.network \
          /etc/systemd/network/30-br0.network; do
   if [[ -f "$f" ]]; then
@@ -193,6 +196,21 @@ for f in /etc/systemd/network/10-br0.netdev \
   fi
 done
 [[ $removed_any -eq 0 ]] && skip "no systemd-networkd br0 config files"
+
+# Restore any netplan files the bridge installer dispossessed.
+shopt -s nullglob
+backups=(/etc/netplan/*.rdc-backup)
+shopt -u nullglob
+if [[ ${#backups[@]} -gt 0 ]]; then
+  for b in "${backups[@]}"; do
+    orig="${b%.rdc-backup}"
+    mv "$b" "$orig"
+    ok "restored netplan: $orig"
+  done
+  command -v netplan >/dev/null 2>&1 && netplan generate >/dev/null 2>&1 || true
+else
+  skip "no netplan backups to restore"
+fi
 
 if [[ -f /etc/NetworkManager/conf.d/unmanaged-bridge.conf ]]; then
   rm -f /etc/NetworkManager/conf.d/unmanaged-bridge.conf

@@ -324,6 +324,26 @@ sleep 3
 
 systemctl is-active --quiet $SERVICE_NAME && ok "$SERVICE_NAME is active" || fail "$SERVICE_NAME not active"
 
+# br0 must actually exist with both members enslaved. The TPROXY + ebtables
+# rules below match `-i br0`, so without the bridge they're inert: install
+# looks green, generator traffic never gets diverted to the proxy. This is
+# the silent failure mode that doctor exists to catch.
+if ip link show br0 >/dev/null 2>&1; then
+  ok "br0 interface exists"
+  members_ok=1
+  for m in $MEMBERS; do
+    if bridge link show 2>/dev/null | grep -qE "^[[:space:]]*[0-9]+:[[:space:]]+${m}[@:].*master br0"; then
+      :
+    else
+      members_ok=0
+      fail "br0 member missing: $m"
+    fi
+  done
+  [[ $members_ok -eq 1 ]] && ok "br0 members enslaved: $MEMBERS"
+else
+  fail "br0 interface does not exist (TPROXY rules will not intercept anything)"
+fi
+
 if ss -tlnp "( sport = :$PROXY_PORT )" 2>/dev/null | grep -q python; then
   ok "proxy listening on :$PROXY_PORT"
 else
