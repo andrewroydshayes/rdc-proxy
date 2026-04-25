@@ -162,27 +162,31 @@ jobs:
       - name: Wait for ssh (cloud-init reboots once for net.ifnames)
         timeout-minutes: 15
         run: |
-          # cloud-init's `power_state: reboot` at the end of first boot
-          # means ssh comes up, drops, and comes up again. Don't guess the
-          # sleep window — TCG is slow and variable. Instead, poll until
-          # /proc/uptime reports the VM has been up > 90s, which guarantees
-          # we're past the cloud-init reboot.
+          # cloud-init's runcmd reboots the VM once on first boot to apply
+          # the eth0 rename via netplan. Right before that reboot it touches
+          # /var/lib/rdc-vm-rebooted as a marker. Wait for both:
+          #   - cloud-init reports done (apt install, runcmd all finished)
+          #   - the marker file exists (we are post-reboot)
+          # That covers both races: the wait-then-Stage race we hit when we
+          # only checked uptime, and the apt-lock race we hit when we only
+          # checked cloud-init status.
           SSHCMD="ssh -i $VMDIR/id -p 2222 -o StrictHostKeyChecking=no \
                   -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -o ServerAliveInterval=5 \
                   pi@127.0.0.1"
-          stable_uptime=90
           deadline=$(( $(date +%s) + 14*60 ))
           while [ "$(date +%s)" -lt "$deadline" ]; do
-            up=$($SSHCMD 'cut -d. -f1 /proc/uptime' 2>/dev/null || echo "")
-            if [ -n "$up" ] && [ "$up" -ge "$stable_uptime" ] 2>/dev/null; then
-              echo "VM stable: uptime=${up}s"
+            status=$($SSHCMD 'cloud-init status 2>/dev/null | head -1' 2>/dev/null || echo "")
+            marker=$($SSHCMD 'test -f /var/lib/rdc-vm-rebooted && echo yes || echo no' 2>/dev/null || echo "")
+            if [ "$marker" = "yes" ] && echo "$status" | grep -q "status: done"; then
+              echo "VM ready: cloud-init done, post-reboot marker present"
+              $SSHCMD 'uptime; cloud-init status --long' || true
               exit 0
             fi
-            echo "waiting for stable VM (uptime=${up:-unreachable})"
+            echo "waiting (marker=$marker, cloud-init=${status:-unreachable})"
             sleep 10
           done
           echo "timed out waiting for VM to stabilise"
-          tail -200 "$VMDIR/serial.log"
+          tail -300 "$VMDIR/serial.log"
           exit 1
 
       - name: Probe VM
@@ -205,16 +209,12 @@ jobs:
               -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
               pi@127.0.0.1 bash -s <<'REMOTE'
           set -euo pipefail
-          # Wait for cloud-init to fully finish — it holds apt locks during
-          # its package install phase. cloud-init status --wait blocks until
-          # done state, returning 0 on success / 2 on disabled / non-zero on
-          # error. After that, all apt locks are released and our explicit
-          # install (which the cloud-init `packages:` should have done, but
-          # may have failed silently) is guaranteed to be the only writer.
-          sudo cloud-init status --wait >/dev/null 2>&1 || true
-          # If cloud-init's `packages:` already installed git, the next
-          # install is a no-op. If not, this catches it.
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git >/dev/null
+          # The Wait-for-ssh step already gated on cloud-init status==done
+          # and the post-reboot marker — apt locks are free. cloud-init's
+          # `packages:` should have installed git already; this is the
+          # belt-and-braces fallback if it didn't.
+          command -v git >/dev/null 2>&1 || \
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git >/dev/null
           rm -rf /tmp/repo-source
           mkdir -p /tmp/repo-source
           tar -xzf /tmp/rdc-src.tar.gz -C /tmp/repo-source
