@@ -102,6 +102,13 @@ jobs:
               ssh_authorized_keys:
                 - $(cat "$VMDIR/id.pub")
           ssh_pwauth: false
+          # The Debian Bookworm cloud image is minimal — git isn't
+          # preinstalled, but we need it before install.sh runs (the
+          # repo bootstrap step pre-stages source as a local git repo
+          # so install.sh's clone step can use it as REPO_URL).
+          package_update: true
+          packages:
+            - git
           # net.ifnames=0 alone isn't enough on aarch64 cloud-init — we
           # rewrite netplan to use eth0 explicitly so the installer's
           # hardcoded eth0/eth1 names work.
