@@ -237,16 +237,56 @@ jobs:
           git tag v-vm-test
           REMOTE
 
-      - name: Run install.sh
+      - name: Run install.sh (detached — bridge step kills our ssh)
+        timeout-minutes: 25
         run: |
-          ssh -i "$VMDIR/id" -p 2222 \
-              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-              pi@127.0.0.1 \
-              "sudo RDC_SKIP_DISCLAIMER=1 REPO_URL=/tmp/repo-source BRANCH=v-vm-test \
-                    SECOND_IFACE=eth1 RDC_IP=$RDC_IP PROXY_PORT=$PROXY_PORT \
-                    bash /tmp/repo-source/install/install.sh" | tee install.out
-          # install.sh exits non-zero only if FAIL list is non-empty
-          tail -5 install.out
+          # install.sh's bridge step moves eth0 into br0, which strips eth0's
+          # IP and drops our ssh session. Both new and existing connections
+          # eventually reconnect via the same NAT-DHCP IP (now bound to br0),
+          # but the running ssh streaming the install output dies. Launch
+          # install detached + disowned and tail the log via reconnect.
+          SSHCMD="ssh -i $VMDIR/id -p 2222 -o StrictHostKeyChecking=no \
+                  -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o ServerAliveInterval=5 \
+                  pi@127.0.0.1"
+          $SSHCMD bash -s <<'KICK'
+          sudo bash -c '
+            rm -f /tmp/install.log /tmp/install.done /tmp/install.rc
+            setsid nohup bash -c "
+              RDC_SKIP_DISCLAIMER=1 REPO_URL=/tmp/repo-source BRANCH=v-vm-test \
+              SECOND_IFACE=eth1 RDC_IP=10.0.0.50 PROXY_PORT=5253 \
+              bash /tmp/repo-source/install/install.sh > /tmp/install.log 2>&1
+              echo \$? > /tmp/install.rc
+              touch /tmp/install.done
+            " </dev/null >/dev/null 2>&1 &
+          '
+          KICK
+          # Now wait for install to finish. SSH may fail mid-bridge-flip;
+          # retry until the .done marker appears or we timeout (24min, leaving
+          # 1min for log fetch).
+          deadline=$(( $(date +%s) + 24*60 ))
+          last_lines=0
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            done=$($SSHCMD 'test -f /tmp/install.done && echo yes || echo no' 2>/dev/null || echo "")
+            if [ "$done" = "yes" ]; then
+              echo "install.sh finished"
+              break
+            fi
+            # Print any new log lines so we have visibility while it runs.
+            new_lines=$($SSHCMD "wc -l < /tmp/install.log 2>/dev/null || echo 0" 2>/dev/null || echo 0)
+            if [ "$new_lines" -gt "$last_lines" ] 2>/dev/null; then
+              $SSHCMD "tail -n +$((last_lines+1)) /tmp/install.log 2>/dev/null" 2>/dev/null || true
+              last_lines=$new_lines
+            else
+              echo "(waiting; ssh=${done:-unreachable})"
+            fi
+            sleep 15
+          done
+          # Fetch full log + rc
+          $SSHCMD 'cat /tmp/install.log' > install.out 2>/dev/null || echo "(could not fetch install.log)" > install.out
+          rc=$($SSHCMD 'cat /tmp/install.rc 2>/dev/null || echo "no-rc"' 2>/dev/null || echo "ssh-fail")
+          echo "--- install.sh exit code: $rc ---"
+          tail -25 install.out
+          test "$rc" = "0"
 
       - name: Run doctor (must be clean)
         run: |
