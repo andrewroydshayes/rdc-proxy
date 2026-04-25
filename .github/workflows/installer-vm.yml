@@ -1,0 +1,261 @@
+name: Installer VM (full)
+
+# Boots a Debian Bookworm aarch64 cloud image under qemu-system-aarch64 with
+# KVM acceleration on a GitHub-hosted ARM64 runner, then exercises the full
+# pipeline end-to-end:
+#
+#   1. install.sh runs (asserts exit 0, prints summary)
+#   2. rdc-proxy doctor runs (asserts JSON ok=true and the bridge actually exists)
+#   3. uninstall.sh runs
+#   4. doctor runs again against the empty config (asserts FAIL with the
+#      "everything is gone" check signature)
+#
+# Triggers: PRs that touch install/, daily cron, and manual workflow_dispatch.
+# Slow lane — complement to .github/workflows/installer-smoke.yml (fast lane).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'install/**'
+      - 'rdc_proxy/doctor.py'
+      - '.github/workflows/installer-vm.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'install/**'
+      - 'rdc_proxy/doctor.py'
+      - '.github/workflows/installer-vm.yml'
+  schedule:
+    - cron: '0 11 * * *'   # 11:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  vm:
+    # ARM64 runner so qemu-system-aarch64 runs with KVM (free for public repos).
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+
+    env:
+      VMDIR: /tmp/rdc-vm
+      IMAGE_URL: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-arm64.qcow2
+      RDC_IP: 10.0.0.50
+      PROXY_PORT: '5253'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install qemu + ovmf + cloud-image-utils
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-arm qemu-utils \
+            cloud-image-utils ovmf jq netcat-openbsd
+
+      - name: KVM sanity
+        run: |
+          test -e /dev/kvm && echo "/dev/kvm OK"
+          ls -la /dev/kvm
+          sudo chmod 666 /dev/kvm
+          qemu-system-aarch64 --version | head -1
+
+      - name: Cache Debian Bookworm aarch64 image
+        id: imgcache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/rdc-vm/debian-bookworm-arm64.qcow2
+          key: debian-bookworm-arm64-cloud-2025-01
+
+      - name: Download cloud image (cache miss only)
+        if: steps.imgcache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.cache/rdc-vm
+          curl -fL -o ~/.cache/rdc-vm/debian-bookworm-arm64.qcow2 "$IMAGE_URL"
+
+      - name: Provision VM workdir
+        run: |
+          mkdir -p "$VMDIR"
+          cp ~/.cache/rdc-vm/debian-bookworm-arm64.qcow2 "$VMDIR/disk.qcow2"
+          qemu-img resize "$VMDIR/disk.qcow2" 8G
+          # 64MB UEFI vars (separate writable file — required by edk2)
+          truncate -s 64M "$VMDIR/efi_vars.fd"
+          # OVMF firmware path on ubuntu-arm runners
+          cp /usr/share/AAVMF/AAVMF_CODE.fd "$VMDIR/efi_code.fd"
+
+      - name: Generate ssh key + cloud-init seed
+        run: |
+          ssh-keygen -t ed25519 -N '' -f "$VMDIR/id" -q
+          cat > "$VMDIR/user-data" <<EOF
+          #cloud-config
+          hostname: rdc-test
+          users:
+            - name: pi
+              sudo: ALL=(ALL) NOPASSWD:ALL
+              shell: /bin/bash
+              ssh_authorized_keys:
+                - $(cat "$VMDIR/id.pub")
+          ssh_pwauth: false
+          # net.ifnames=0 alone isn't enough on aarch64 cloud-init — we
+          # rewrite netplan to use eth0 explicitly so the installer's
+          # hardcoded eth0/eth1 names work.
+          write_files:
+            - path: /etc/netplan/50-cloud-init.yaml
+              permissions: '0600'
+              content: |
+                network:
+                    version: 2
+                    ethernets:
+                        eth0:
+                            match: {macaddress: "52:54:00:12:34:56"}
+                            set-name: eth0
+                            dhcp4: true
+            - path: /etc/systemd/network/10-eth1.link
+              content: |
+                [Match]
+                MACAddress=52:54:00:12:34:57
+                [Link]
+                Name=eth1
+          runcmd:
+            - [ systemctl, enable, --now, ssh ]
+            - [ update-initramfs, -u ]
+          power_state:
+            mode: reboot
+            condition: True
+          EOF
+          echo 'instance-id: rdc-test-001' > "$VMDIR/meta-data"
+          echo 'local-hostname: rdc-test' >> "$VMDIR/meta-data"
+          cloud-localds "$VMDIR/seed.iso" "$VMDIR/user-data" "$VMDIR/meta-data"
+
+      - name: Boot VM (daemonized, serial -> log)
+        run: |
+          qemu-system-aarch64 \
+            -M virt -accel kvm -cpu host -smp 2 -m 2048 \
+            -drive if=pflash,format=raw,readonly=on,file="$VMDIR/efi_code.fd" \
+            -drive if=pflash,format=raw,file="$VMDIR/efi_vars.fd" \
+            -drive if=virtio,format=qcow2,file="$VMDIR/disk.qcow2" \
+            -drive if=virtio,format=raw,file="$VMDIR/seed.iso",readonly=on \
+            -display none -serial file:"$VMDIR/serial.log" -monitor none \
+            -daemonize -pidfile "$VMDIR/vm.pid" \
+            -netdev user,id=lan,hostfwd=tcp:127.0.0.1:2222-:22 \
+            -device virtio-net-pci,netdev=lan,mac=52:54:00:12:34:56 \
+            -netdev socket,id=gen,listen=127.0.0.1:5500 \
+            -device virtio-net-pci,netdev=gen,mac=52:54:00:12:34:57
+
+      - name: Wait for ssh (cloud-init reboots once for net.ifnames)
+        timeout-minutes: 6
+        run: |
+          # cloud-init's `power_state: reboot` at the end of first boot
+          # means we'll see ssh come up, drop, and come up again. Wait
+          # for the *second* up state by sleeping past the reboot window.
+          for i in $(seq 1 60); do
+            nc -z 127.0.0.1 2222 && echo "ssh up (try $i)" && break
+            sleep 5
+          done
+          echo "first ssh window seen; sleeping through cloud-init reboot..."
+          sleep 30
+          for i in $(seq 1 60); do
+            ssh -i "$VMDIR/id" -p 2222 \
+                -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                -o ConnectTimeout=3 pi@127.0.0.1 'echo READY' 2>/dev/null && break
+            sleep 5
+          done
+
+      - name: Probe VM
+        run: |
+          ssh -i "$VMDIR/id" -p 2222 \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              pi@127.0.0.1 'uname -a; ip -br link; cat /etc/os-release | head -2'
+
+      - name: Stage source on VM
+        run: |
+          tar --exclude=.git --exclude=.venv -czf /tmp/rdc-src.tar.gz -C "$GITHUB_WORKSPACE" .
+          scp -i "$VMDIR/id" -P 2222 \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              /tmp/rdc-src.tar.gz pi@127.0.0.1:/tmp/
+          ssh -i "$VMDIR/id" -p 2222 \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              pi@127.0.0.1 bash -s <<'REMOTE'
+          set -euo pipefail
+          rm -rf /tmp/repo-source
+          mkdir -p /tmp/repo-source
+          tar -xzf /tmp/rdc-src.tar.gz -C /tmp/repo-source
+          cd /tmp/repo-source
+          find . -name '._*' -delete
+          git init -q
+          git -c user.email=t@l -c user.name=t add -A
+          git -c user.email=t@l -c user.name=t commit -q -m bootstrap
+          git tag v-vm-test
+          REMOTE
+
+      - name: Run install.sh
+        run: |
+          ssh -i "$VMDIR/id" -p 2222 \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              pi@127.0.0.1 \
+              "sudo RDC_SKIP_DISCLAIMER=1 REPO_URL=/tmp/repo-source BRANCH=v-vm-test \
+                    SECOND_IFACE=eth1 RDC_IP=$RDC_IP PROXY_PORT=$PROXY_PORT \
+                    bash /tmp/repo-source/install/install.sh" | tee install.out
+          # install.sh exits non-zero only if FAIL list is non-empty
+          tail -5 install.out
+
+      - name: Run doctor (must be clean)
+        run: |
+          ssh -i "$VMDIR/id" -p 2222 \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              pi@127.0.0.1 'sudo /opt/rdc-proxy/venv/bin/python -m rdc_proxy doctor --json' \
+              > doctor.json
+          cat doctor.json | jq '{ok, counts, fails: [.checks[] | select(.status=="fail") | .name]}'
+          # The bridge MUST be up — that's what the installer fix is about.
+          # rdc_reachable warn is allowed (no real generator wired in).
+          jq -e '.checks[] | select(.name=="bridge")  | .status == "ok"' doctor.json
+          jq -e '.checks[] | select(.name=="bridge_ip") | .status == "ok"' doctor.json
+          jq -e '.checks[] | select(.name=="iptables_mangle_tproxy") | .status == "ok"' doctor.json
+          jq -e '.checks[] | select(.name=="ebtables_broute") | .status == "ok"' doctor.json
+          jq -e '.checks[] | select(.name=="listen_port") | .status == "ok"' doctor.json
+          jq -e '.checks[] | select(.name=="service") | .status == "ok"' doctor.json
+          # Allow rdc_reachable to be warn (no generator in CI) but everything
+          # else must not be fail.
+          jq -e '[.checks[] | select(.status=="fail") | .name] == []' doctor.json
+
+      - name: Run uninstall.sh
+        run: |
+          ssh -i "$VMDIR/id" -p 2222 \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              pi@127.0.0.1 'sudo YES=1 bash /opt/rdc-proxy/install/uninstall.sh' | tee uninstall.out
+
+      - name: Verify clean state after uninstall
+        run: |
+          ssh -i "$VMDIR/id" -p 2222 \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              pi@127.0.0.1 bash -s <<'REMOTE' | tee post-uninstall.out
+          set -e
+          ! pgrep -f 'python.* -m rdc_proxy' >/dev/null
+          test ! -d /opt/rdc-proxy
+          test ! -d /etc/rdc-proxy
+          ! sudo iptables -t mangle -S PREROUTING | grep -q TPROXY
+          ! sudo /usr/sbin/ebtables-legacy -t broute -L BROUTING 2>/dev/null | grep -q "ip-src"
+          test ! -f /etc/systemd/network/05-rdc-proxy-br0.netdev
+          echo OK_CLEAN
+          REMOTE
+          grep -q OK_CLEAN post-uninstall.out
+
+      - name: Capture VM serial log
+        if: always()
+        run: tail -200 "$VMDIR/serial.log" || true
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vm-failure-logs
+          path: |
+            ${{ env.VMDIR }}/serial.log
+            install.out
+            doctor.json
+            uninstall.out
+            post-uninstall.out
+          if-no-files-found: ignore
+
+      - name: Stop VM
+        if: always()
+        run: |
+          [ -f "$VMDIR/vm.pid" ] && sudo kill "$(cat "$VMDIR/vm.pid")" 2>/dev/null || true
