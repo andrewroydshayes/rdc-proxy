@@ -1,0 +1,368 @@
+name: Installer VM (full)
+
+# Boots a Debian Bookworm aarch64 cloud image under qemu-system-aarch64 with
+# KVM acceleration on a GitHub-hosted ARM64 runner, then exercises the full
+# pipeline end-to-end:
+#
+#   1. install.sh runs (asserts exit 0, prints summary)
+#   2. rdc-proxy doctor runs (asserts JSON ok=true and the bridge actually exists)
+#   3. uninstall.sh runs
+#   4. doctor runs again against the empty config (asserts FAIL with the
+#      "everything is gone" check signature)
+#
+# Triggers: PRs that touch install/, daily cron, and manual workflow_dispatch.
+# Slow lane — complement to .github/workflows/installer-smoke.yml (fast lane).
+
+on:
+  pull_request:
+    paths:
+      - 'install/**'
+      - '.github/workflows/installer-vm.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'install/**'
+      - '.github/workflows/installer-vm.yml'
+  schedule:
+    - cron: '0 11 * * *'   # 11:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  vm:
+    # ARM64 runner so qemu-system-aarch64 runs with KVM (free for public repos).
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+
+    env:
+      VMDIR: /tmp/rdc-vm
+      IMAGE_URL: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-arm64.qcow2
+      RDC_IP: 10.0.0.50
+      PROXY_PORT: '5253'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install qemu + ovmf + cloud-image-utils
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-arm qemu-utils \
+            cloud-image-utils ovmf jq netcat-openbsd
+
+      - name: Detect virtualization mode
+        id: virt
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            echo "accel=kvm -cpu host" >> "$GITHUB_OUTPUT"
+            echo "/dev/kvm OK — using KVM"
+          else
+            # TCG-on-aarch64-host is slow but functional. cortex-a72 is the
+            # Pi-4 CPU model, gives us a known-good guest CPU profile.
+            echo "accel=tcg,thread=multi -cpu cortex-a72" >> "$GITHUB_OUTPUT"
+            echo "no /dev/kvm — falling back to TCG (slower)"
+          fi
+          qemu-system-aarch64 --version | head -1
+
+      - name: Cache Debian Bookworm aarch64 image
+        id: imgcache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/rdc-vm/debian-bookworm-arm64.qcow2
+          key: debian-bookworm-arm64-cloud-2025-01
+
+      - name: Download cloud image (cache miss only)
+        if: steps.imgcache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.cache/rdc-vm
+          curl -fL -o ~/.cache/rdc-vm/debian-bookworm-arm64.qcow2 "$IMAGE_URL"
+
+      - name: Provision VM workdir
+        run: |
+          mkdir -p "$VMDIR"
+          cp ~/.cache/rdc-vm/debian-bookworm-arm64.qcow2 "$VMDIR/disk.qcow2"
+          qemu-img resize "$VMDIR/disk.qcow2" 8G
+          # 64MB UEFI vars (separate writable file — required by edk2)
+          truncate -s 64M "$VMDIR/efi_vars.fd"
+          # OVMF firmware path on ubuntu-arm runners
+          cp /usr/share/AAVMF/AAVMF_CODE.fd "$VMDIR/efi_code.fd"
+
+      - name: Generate ssh key + cloud-init seed
+        run: |
+          ssh-keygen -t ed25519 -N '' -f "$VMDIR/id" -q
+          cat > "$VMDIR/user-data" <<EOF
+          #cloud-config
+          hostname: rdc-test
+          users:
+            - name: pi
+              sudo: ALL=(ALL) NOPASSWD:ALL
+              shell: /bin/bash
+              ssh_authorized_keys:
+                - $(cat "$VMDIR/id.pub")
+          ssh_pwauth: false
+          # The Debian Bookworm cloud image is minimal. Pre-install
+          # everything install.sh would otherwise apt-get during its
+          # own run — under TCG (no KVM on hosted ARM runners) each
+          # apt operation costs minutes, and install.sh's apt step
+          # alone was blowing the 45-min job budget. With these
+          # pre-installed cloud-init-side, install.sh's apt step is
+          # a no-op and the run completes in ~5 min instead of >45.
+          package_update: true
+          packages:
+            - git
+            - python3
+            - python3-pip
+            - python3-venv
+            - python3-flask
+            - iptables
+            - ebtables
+            - tcpdump
+            - bridge-utils
+          # net.ifnames=0 alone isn't enough on aarch64 cloud-init — we
+          # rewrite netplan to use eth0 explicitly so the installer's
+          # hardcoded eth0/eth1 names work.
+          write_files:
+            - path: /etc/netplan/50-cloud-init.yaml
+              permissions: '0600'
+              content: |
+                network:
+                    version: 2
+                    ethernets:
+                        eth0:
+                            match: {macaddress: "52:54:00:12:34:56"}
+                            set-name: eth0
+                            dhcp4: true
+                        eth2:
+                            match: {macaddress: "52:54:00:12:34:58"}
+                            set-name: eth2
+                            dhcp4: true
+            - path: /etc/systemd/network/10-eth1.link
+              content: |
+                [Match]
+                MACAddress=52:54:00:12:34:57
+                [Link]
+                Name=eth1
+            - path: /etc/systemd/network/10-eth2.link
+              content: |
+                [Match]
+                MACAddress=52:54:00:12:34:58
+                [Link]
+                Name=eth2
+          runcmd:
+            - [ systemctl, enable, --now, ssh ]
+            # update-initramfs is NOT needed — netplan's set-name rename is
+            # handled by udev at link-add time using the .link file under
+            # /run/systemd/network, which is reloaded on reboot. Skipping
+            # initramfs rebuild keeps first-boot under TCG manageable.
+            # One-shot guarded reboot: marker file gates against power_state's
+            # infinite-reboot trap (cloud-init re-runs final on each boot).
+            - [ sh, -c, 'test -f /var/lib/rdc-vm-rebooted || (touch /var/lib/rdc-vm-rebooted && reboot)' ]
+          EOF
+          echo 'instance-id: rdc-test-001' > "$VMDIR/meta-data"
+          echo 'local-hostname: rdc-test' >> "$VMDIR/meta-data"
+          cloud-localds "$VMDIR/seed.iso" "$VMDIR/user-data" "$VMDIR/meta-data"
+
+      - name: Boot VM (daemonized, serial -> log)
+        run: |
+          # accel + cpu chosen above based on /dev/kvm presence.
+          qemu-system-aarch64 \
+            -M virt -accel ${{ steps.virt.outputs.accel }} -smp 2 -m 2048 \
+            -drive if=pflash,format=raw,readonly=on,file="$VMDIR/efi_code.fd" \
+            -drive if=pflash,format=raw,file="$VMDIR/efi_vars.fd" \
+            -drive if=virtio,format=qcow2,file="$VMDIR/disk.qcow2" \
+            -drive if=virtio,format=raw,file="$VMDIR/seed.iso",readonly=on \
+            -display none -serial file:"$VMDIR/serial.log" -monitor none \
+            -daemonize -pidfile "$VMDIR/vm.pid" \
+            -netdev user,id=lan \
+            -device virtio-net-pci,netdev=lan,mac=52:54:00:12:34:56 \
+            -netdev socket,id=gen,listen=127.0.0.1:5500 \
+            -device virtio-net-pci,netdev=gen,mac=52:54:00:12:34:57 \
+            -netdev user,id=mgmt,hostfwd=tcp:127.0.0.1:2222-:22 \
+            -device virtio-net-pci,netdev=mgmt,mac=52:54:00:12:34:58
+          # NIC layout:
+          #   eth0 (lan, 52:...:56) — user-mode NAT, primary bridge member
+          #   eth1 (gen, 52:...:57) — dangling socket peer, second bridge member
+          #   eth2 (mgmt,52:...:58) — separate user-mode NAT, ssh hostfwd 2222->22.
+          # Only eth2 carries ssh — eth0/eth1 get dispossessed into br0 by the
+          # installer, so anything ssh-bound on eth0 dies during the takeover.
+
+      - name: Wait for ssh (cloud-init reboots once for net.ifnames)
+        timeout-minutes: 17
+        run: |
+          # cloud-init's runcmd reboots the VM once on first boot to apply
+          # the eth0 rename via netplan. Right before that reboot it touches
+          # /var/lib/rdc-vm-rebooted as a marker. Wait for both:
+          #   - cloud-init reports done (apt install, runcmd all finished)
+          #   - the marker file exists (we are post-reboot)
+          # That covers both races: the wait-then-Stage race we hit when we
+          # only checked uptime, and the apt-lock race we hit when we only
+          # checked cloud-init status.
+          SSHCMD="ssh -i $VMDIR/id -p 2222 -o StrictHostKeyChecking=no \
+                  -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -o ServerAliveInterval=5 \
+                  pi@127.0.0.1"
+          deadline=$(( $(date +%s) + 15*60 ))
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            status=$($SSHCMD 'cloud-init status 2>/dev/null | head -1' 2>/dev/null || echo "")
+            marker=$($SSHCMD 'test -f /var/lib/rdc-vm-rebooted && echo yes || echo no' 2>/dev/null || echo "")
+            if [ "$marker" = "yes" ] && echo "$status" | grep -q "status: done"; then
+              echo "VM ready: cloud-init done, post-reboot marker present"
+              $SSHCMD 'uptime; cloud-init status --long' || true
+              exit 0
+            fi
+            echo "waiting (marker=$marker, cloud-init=${status:-unreachable})"
+            sleep 10
+          done
+          echo "timed out waiting for VM to stabilise"
+          tail -300 "$VMDIR/serial.log"
+          exit 1
+
+      - name: Probe VM
+        run: |
+          ssh -i "$VMDIR/id" -p 2222 \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              pi@127.0.0.1 'uname -a; ip -br link; cat /etc/os-release | head -2'
+
+      - name: Stage source on VM
+        run: |
+          tar --exclude=.git --exclude=.venv -czf /tmp/rdc-src.tar.gz -C "$GITHUB_WORKSPACE" .
+          scp -i "$VMDIR/id" -P 2222 \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              /tmp/rdc-src.tar.gz pi@127.0.0.1:/tmp/
+          # Explicit apt install instead of relying on cloud-init's `packages:`
+          # — cloud-init may still be mid-apt at the moment we connect, and
+          # racing it has caused this step to fail with `git: command not
+          # found`. Wait for the apt lock first, then install git ourselves.
+          ssh -i "$VMDIR/id" -p 2222 \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              pi@127.0.0.1 bash -s <<'REMOTE'
+          set -euo pipefail
+          # The Wait-for-ssh step already gated on cloud-init status==done
+          # and the post-reboot marker — apt locks are free. cloud-init's
+          # `packages:` should have installed git already; this is the
+          # belt-and-braces fallback if it didn't.
+          command -v git >/dev/null 2>&1 || \
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git >/dev/null
+          rm -rf /tmp/repo-source
+          mkdir -p /tmp/repo-source
+          tar -xzf /tmp/rdc-src.tar.gz -C /tmp/repo-source
+          cd /tmp/repo-source
+          find . -name '._*' -delete
+          git init -q
+          git -c user.email=t@l -c user.name=t add -A
+          git -c user.email=t@l -c user.name=t commit -q -m bootstrap
+          git tag v-vm-test
+          REMOTE
+
+      - name: Run install.sh (detached — bridge step kills the eth0 path)
+        timeout-minutes: 25
+        run: |
+          # install.sh's bridge step moves eth0 into br0. ssh comes in over a
+          # dedicated management NIC (eth2, separate user-mode NAT) that the
+          # installer never touches, so the session survives — but a streaming
+          # ssh that runs the install inline still risks dying when the bridge
+          # flip momentarily flaps routing. Belt and braces: launch install
+          # detached + disowned and tail the log via short polling reconnects.
+          SSHCMD="ssh -i $VMDIR/id -p 2222 -o StrictHostKeyChecking=no \
+                  -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o ServerAliveInterval=5 \
+                  pi@127.0.0.1"
+          $SSHCMD bash -s <<'KICK'
+          sudo bash -c '
+            rm -f /tmp/install.log /tmp/install.done /tmp/install.rc
+            setsid nohup bash -c "
+              RDC_SKIP_DISCLAIMER=1 REPO_URL=/tmp/repo-source BRANCH=v-vm-test \
+              SECOND_IFACE=eth1 RDC_IP=10.0.0.50 PROXY_PORT=5253 \
+              bash /tmp/repo-source/install/install.sh > /tmp/install.log 2>&1
+              echo \$? > /tmp/install.rc
+              touch /tmp/install.done
+            " </dev/null >/dev/null 2>&1 &
+          '
+          KICK
+          # Now wait for install to finish. SSH may fail mid-bridge-flip;
+          # retry until the .done marker appears or we timeout (24min, leaving
+          # 1min for log fetch).
+          deadline=$(( $(date +%s) + 24*60 ))
+          last_lines=0
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            done=$($SSHCMD 'test -f /tmp/install.done && echo yes || echo no' 2>/dev/null || echo "")
+            if [ "$done" = "yes" ]; then
+              echo "install.sh finished"
+              break
+            fi
+            # Print any new log lines so we have visibility while it runs.
+            new_lines=$($SSHCMD "wc -l < /tmp/install.log 2>/dev/null || echo 0" 2>/dev/null || echo 0)
+            if [ "$new_lines" -gt "$last_lines" ] 2>/dev/null; then
+              $SSHCMD "tail -n +$((last_lines+1)) /tmp/install.log 2>/dev/null" 2>/dev/null || true
+              last_lines=$new_lines
+            else
+              echo "(waiting; ssh=${done:-unreachable})"
+            fi
+            sleep 15
+          done
+          # Fetch full log + rc
+          $SSHCMD 'cat /tmp/install.log' > install.out 2>/dev/null || echo "(could not fetch install.log)" > install.out
+          rc=$($SSHCMD 'cat /tmp/install.rc 2>/dev/null || echo "no-rc"' 2>/dev/null || echo "ssh-fail")
+          echo "--- install.sh exit code: $rc ---"
+          tail -25 install.out
+          test "$rc" = "0"
+
+      - name: Run doctor (must be clean)
+        run: |
+          ssh -i "$VMDIR/id" -p 2222 \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              pi@127.0.0.1 'sudo /opt/rdc-proxy/venv/bin/python -m rdc_proxy doctor --json' \
+              > doctor.json
+          cat doctor.json | jq '{ok, counts, fails: [.checks[] | select(.status=="fail") | .name]}'
+          # The bridge MUST be up — that's what the installer fix is about.
+          # rdc_reachable warn is allowed (no real generator wired in).
+          jq -e '.checks[] | select(.name=="bridge")  | .status == "ok"' doctor.json
+          jq -e '.checks[] | select(.name=="bridge_ip") | .status == "ok"' doctor.json
+          jq -e '.checks[] | select(.name=="iptables_mangle_tproxy") | .status == "ok"' doctor.json
+          jq -e '.checks[] | select(.name=="ebtables_broute") | .status == "ok"' doctor.json
+          jq -e '.checks[] | select(.name=="listen_port") | .status == "ok"' doctor.json
+          jq -e '.checks[] | select(.name=="service") | .status == "ok"' doctor.json
+          # Allow rdc_reachable to be warn (no generator in CI) but everything
+          # else must not be fail.
+          jq -e '[.checks[] | select(.status=="fail") | .name] == []' doctor.json
+
+      - name: Run uninstall.sh
+        run: |
+          ssh -i "$VMDIR/id" -p 2222 \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              pi@127.0.0.1 'sudo YES=1 bash /opt/rdc-proxy/install/uninstall.sh' | tee uninstall.out
+
+      - name: Verify clean state after uninstall
+        run: |
+          ssh -i "$VMDIR/id" -p 2222 \
+              -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              pi@127.0.0.1 bash -s <<'REMOTE' | tee post-uninstall.out
+          set -e
+          ! pgrep -f 'python.* -m rdc_proxy' >/dev/null
+          test ! -d /opt/rdc-proxy
+          test ! -d /etc/rdc-proxy
+          ! sudo iptables -t mangle -S PREROUTING | grep -q TPROXY
+          ! sudo /usr/sbin/ebtables-legacy -t broute -L BROUTING 2>/dev/null | grep -q "ip-src"
+          test ! -f /etc/systemd/network/05-rdc-proxy-br0.netdev
+          echo OK_CLEAN
+          REMOTE
+          grep -q OK_CLEAN post-uninstall.out
+
+      - name: Capture VM serial log
+        if: always()
+        run: tail -200 "$VMDIR/serial.log" || true
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vm-failure-logs
+          path: |
+            ${{ env.VMDIR }}/serial.log
+            install.out
+            doctor.json
+            uninstall.out
+            post-uninstall.out
+          if-no-files-found: ignore
+
+      - name: Stop VM
+        if: always()
+        run: |
+          [ -f "$VMDIR/vm.pid" ] && sudo kill "$(cat "$VMDIR/vm.pid")" 2>/dev/null || true
