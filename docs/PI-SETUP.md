@@ -173,40 +173,45 @@ Leave the Imager window open — you'll use it in the next step.
 
 ## 4. Flash the SD card
 
-The Imager window looks like this (both Mac and Windows):
+> **About this section:** these instructions match **Raspberry Pi Imager 2.0.7**
+> (the current version as of April 2026). Imager 2.x is a step-by-step wizard
+> that fills the whole window — *not* the older three-button hub
+> (CHOOSE DEVICE / CHOOSE OS / CHOOSE STORAGE on one screen) you may have seen
+> in older guides. The settings you fill in are the same; just laid out
+> differently. If your Imager looks like an older one with three big buttons
+> and a popup labeled "Would you like to apply OS customisation settings?",
+> the field names below still apply — they were just on tabs back then.
 
-```
-┌─────────────────────────────────────────┐
-│  Raspberry Pi Imager                     │
-│                                          │
-│   [ CHOOSE DEVICE ]                      │
-│   [ CHOOSE OS     ]                      │
-│   [ CHOOSE STORAGE ]                     │
-│                          [ NEXT ]        │
-└─────────────────────────────────────────┘
-```
+The wizard has six steps in order:
+
+1. **Raspberry Pi Device**
+2. **Operating System**
+3. **Storage**
+4. **OS Customisation**
+5. **Writing**
+6. **Done**
+
+Each step fills the window. Use **Next** at the bottom to advance, **Back** to
+step back.
 
 ### 4a. Insert the SD card
 
 Plug your microSD card into your computer's card reader. The computer may pop
 up a notification — ignore it, don't "format" it if offered.
 
-### 4b. Click the buttons in order
+### 4b. Step through the wizard
 
-1. **CHOOSE DEVICE** → pick **Raspberry Pi 4**.
-2. **CHOOSE OS** → pick **Raspberry Pi OS (other)** → then **Raspberry Pi OS Lite (64-bit)**. Make sure it says "Lite" and "64-bit." You do **not** want the desktop version — we don't need a monitor hooked up.
-3. **CHOOSE STORAGE** → pick your SD card. It'll be listed by size and brand (e.g. "Generic SD Card Reader — 32 GB"). **Double-check** you're not picking your main hard drive by accident.
-4. Click **NEXT**.
+1. **Raspberry Pi Device** → pick **Raspberry Pi 4**. Click **Next**.
+2. **Operating System** → pick **Raspberry Pi OS (other)** → then **Raspberry Pi OS Lite (64-bit)**. Make sure it says "Lite" and "64-bit." You do **not** want the desktop version — we don't need a monitor hooked up. Click **Next**.
+3. **Storage** → pick your SD card. It'll be listed by size and brand (e.g. "Generic SD Card Reader — 32 GB"). **Double-check** you're not picking your main hard drive by accident. Click **Next**.
 
-### 4c. OS customization — this is the important part
+### 4c. OS Customisation — this is the important part
 
-A dialog appears: *"Would you like to apply OS customisation settings?"*
+The next step is **OS Customisation**. The whole panel is one scrolling form
+(no tabs). If Imager offers to "Use saved settings" at the top, click **Edit
+settings** instead so you fill them in fresh.
 
-Click **EDIT SETTINGS**.
-
-You now see a form with tabs: **General**, **Services**, **Options**.
-
-**On the "General" tab**, fill in:
+Fill in these fields (scroll down through the panel — they're stacked):
 
 | Field | What to type |
 |---|---|
@@ -214,21 +219,16 @@ You now see a form with tabs: **General**, **Services**, **Options**.
 | **Set username and password** | Check the box. Username: `pi` (recommended). Password: make up a strong password and **write it down somewhere** — you'll need it in a few steps. |
 | **Configure wireless LAN** | Check the box. Fill in your **Wi-Fi network name (SSID)** and **Wi-Fi password**. This is a backup path — if the wired connection ever breaks, you can still reach the Pi over Wi-Fi. |
 | **Wireless LAN country** | Pick your country (e.g. **US** for the United States). |
-| **Set locale settings** | Check the box. Pick your **Time zone** (e.g. America/Los_Angeles) and **Keyboard layout** (e.g. us). |
+| **Locale / Capital city** | In Imager 2.x this is a single picker — pick the capital city closest to you (e.g. **Los Angeles**, **New York**, **London**). It sets timezone and keyboard layout for you. *(In older Imagers this was two separate fields, "Time zone" and "Keyboard layout" — same effect.)* |
+| **Enable SSH** | ☑ check it, then pick **Use password authentication**. |
+| **Raspberry Pi Connect** *(2.x only)* | Leave this **unchecked** if you see it. We don't use it; it's a separate Raspberry Pi remote-access service. |
+| **Eject media when finished** | Leave checked. This doesn't physically pop the card out — it just unmounts it so it's safe to pull out without corrupting the card. |
 
-**Switch to the "Services" tab**, and check:
+Click **Save** at the bottom of the panel.
 
-- ☑ **Enable SSH** → pick **Use password authentication**.
-
-**Switch to the "Options" tab**, and optionally:
-
-- ☑ **Eject media when finished** — this doesn't physically pop the card out; it just unmounts it so it's safe to pull out without corrupting the card. Leave it checked.
-
-Click **SAVE**.
-
-Back on the "Apply OS customisation?" dialog, click **YES**.
-
-One more dialog: *"All existing data on the SD card will be erased. Are you sure?"* → Click **YES**.
+Imager will ask you to confirm: click **Yes** when it asks to apply the
+customisation, then **Yes** again on *"All existing data on the SD card will
+be erased. Are you sure?"*
 
 ### 4d. Wait
 
@@ -236,7 +236,8 @@ The Imager writes the OS to the card, then verifies it. Takes **5–15 minutes**
 depending on your card speed. Progress bar shows percent done. Don't interrupt
 it; don't unplug the card.
 
-When it finishes, a dialog says *"Write Successful"*. Click **CONTINUE**.
+When it finishes, a dialog or wizard step confirms *"Write Successful"* /
+*"Done"*. Click **Continue** (older Imager) or **Done** (Imager 2.x).
 
 Now physically remove the SD card: pull it out of the reader (or press-and-release
 if your reader is the spring-loaded kind). If your computer shows a warning
