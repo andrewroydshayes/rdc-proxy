@@ -14,10 +14,15 @@ name: Installer VM (full)
 # Slow lane — complement to .github/workflows/installer-smoke.yml (fast lane).
 
 on:
-  # Currently disabled on PR/push while iterating on TCG-vs-bridge-takeover
-  # quirks in the qemu+user-mode-NAT topology. Run manually via "Run workflow"
-  # in the Actions tab, or wait for the daily cron. The fast-lane workflow
-  # (installer-smoke.yml) gates PRs on shellcheck + doctor logic.
+  pull_request:
+    paths:
+      - 'install/**'
+      - '.github/workflows/installer-vm.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'install/**'
+      - '.github/workflows/installer-vm.yml'
   schedule:
     - cron: '0 11 * * *'   # 11:00 UTC daily
   workflow_dispatch:
@@ -126,12 +131,22 @@ jobs:
                             match: {macaddress: "52:54:00:12:34:56"}
                             set-name: eth0
                             dhcp4: true
+                        eth2:
+                            match: {macaddress: "52:54:00:12:34:58"}
+                            set-name: eth2
+                            dhcp4: true
             - path: /etc/systemd/network/10-eth1.link
               content: |
                 [Match]
                 MACAddress=52:54:00:12:34:57
                 [Link]
                 Name=eth1
+            - path: /etc/systemd/network/10-eth2.link
+              content: |
+                [Match]
+                MACAddress=52:54:00:12:34:58
+                [Link]
+                Name=eth2
           runcmd:
             - [ systemctl, enable, --now, ssh ]
             # update-initramfs is NOT needed — netplan's set-name rename is
@@ -157,13 +172,21 @@ jobs:
             -drive if=virtio,format=raw,file="$VMDIR/seed.iso",readonly=on \
             -display none -serial file:"$VMDIR/serial.log" -monitor none \
             -daemonize -pidfile "$VMDIR/vm.pid" \
-            -netdev user,id=lan,hostfwd=tcp:127.0.0.1:2222-:22 \
+            -netdev user,id=lan \
             -device virtio-net-pci,netdev=lan,mac=52:54:00:12:34:56 \
             -netdev socket,id=gen,listen=127.0.0.1:5500 \
-            -device virtio-net-pci,netdev=gen,mac=52:54:00:12:34:57
+            -device virtio-net-pci,netdev=gen,mac=52:54:00:12:34:57 \
+            -netdev user,id=mgmt,hostfwd=tcp:127.0.0.1:2222-:22 \
+            -device virtio-net-pci,netdev=mgmt,mac=52:54:00:12:34:58
+          # NIC layout:
+          #   eth0 (lan, 52:...:56) — user-mode NAT, primary bridge member
+          #   eth1 (gen, 52:...:57) — dangling socket peer, second bridge member
+          #   eth2 (mgmt,52:...:58) — separate user-mode NAT, ssh hostfwd 2222->22.
+          # Only eth2 carries ssh — eth0/eth1 get dispossessed into br0 by the
+          # installer, so anything ssh-bound on eth0 dies during the takeover.
 
       - name: Wait for ssh (cloud-init reboots once for net.ifnames)
-        timeout-minutes: 25
+        timeout-minutes: 17
         run: |
           # cloud-init's runcmd reboots the VM once on first boot to apply
           # the eth0 rename via netplan. Right before that reboot it touches
@@ -176,7 +199,7 @@ jobs:
           SSHCMD="ssh -i $VMDIR/id -p 2222 -o StrictHostKeyChecking=no \
                   -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -o ServerAliveInterval=5 \
                   pi@127.0.0.1"
-          deadline=$(( $(date +%s) + 23*60 ))
+          deadline=$(( $(date +%s) + 15*60 ))
           while [ "$(date +%s)" -lt "$deadline" ]; do
             status=$($SSHCMD 'cloud-init status 2>/dev/null | head -1' 2>/dev/null || echo "")
             marker=$($SSHCMD 'test -f /var/lib/rdc-vm-rebooted && echo yes || echo no' 2>/dev/null || echo "")
@@ -229,14 +252,15 @@ jobs:
           git tag v-vm-test
           REMOTE
 
-      - name: Run install.sh (detached — bridge step kills our ssh)
+      - name: Run install.sh (detached — bridge step kills the eth0 path)
         timeout-minutes: 25
         run: |
-          # install.sh's bridge step moves eth0 into br0, which strips eth0's
-          # IP and drops our ssh session. Both new and existing connections
-          # eventually reconnect via the same NAT-DHCP IP (now bound to br0),
-          # but the running ssh streaming the install output dies. Launch
-          # install detached + disowned and tail the log via reconnect.
+          # install.sh's bridge step moves eth0 into br0. ssh comes in over a
+          # dedicated management NIC (eth2, separate user-mode NAT) that the
+          # installer never touches, so the session survives — but a streaming
+          # ssh that runs the install inline still risks dying when the bridge
+          # flip momentarily flaps routing. Belt and braces: launch install
+          # detached + disowned and tail the log via short polling reconnects.
           SSHCMD="ssh -i $VMDIR/id -p 2222 -o StrictHostKeyChecking=no \
                   -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o ServerAliveInterval=5 \
                   pi@127.0.0.1"
