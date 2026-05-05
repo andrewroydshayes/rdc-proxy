@@ -11,7 +11,9 @@ def test_creates_defaults_if_missing(tmp_path):
     p = tmp_path / "config.json"
     cfg = cfg_mod.load_config(str(p))
     assert p.exists()
+    assert cfg["web_listen_addr"] == "0.0.0.0"
     assert cfg["proxy_port"] == 5253
+    assert cfg["proxy_listen_addr"] == "0.0.0.0"
     # File content matches defaults
     on_disk = json.loads(p.read_text())
     assert on_disk["cloud_dns"] == "devices.kohler.com"
@@ -19,9 +21,16 @@ def test_creates_defaults_if_missing(tmp_path):
 
 def test_user_override_replaces_top_level(tmp_path):
     p = tmp_path / "config.json"
-    p.write_text(json.dumps({"proxy_port": 9999, "web_port": 8080}))
+    p.write_text(json.dumps({
+        "proxy_listen_addr": "127.0.0.1",
+        "proxy_port": 9999,
+        "web_listen_addr": "192.0.2.10",
+        "web_port": 8080,
+    }))
     cfg = cfg_mod.load_config(str(p))
+    assert cfg["proxy_listen_addr"] == "127.0.0.1"
     assert cfg["proxy_port"] == 9999
+    assert cfg["web_listen_addr"] == "192.0.2.10"
     assert cfg["web_port"] == 8080
     # Un-overridden keys still come from defaults
     assert cfg["cloud_port"] == 5253

@@ -71,7 +71,9 @@ VISIBILITY_DEFAULTS = {
 }
 
 DEFAULT_CONFIG = {
+    "web_listen_addr": "0.0.0.0",
     "web_port": 80,
+    "proxy_listen_addr": "0.0.0.0",
     "proxy_port": 5253,
     "rdc_ip": "10.0.0.50",
     "cloud_dns": "devices.kohler.com",
