@@ -85,6 +85,20 @@ DEFAULT_CONFIG = {
     "stale_thresholds": STALE_THRESHOLDS_DEFAULTS,
     "visibility": VISIBILITY_DEFAULTS,
     "config_dir": "/etc/rdc-proxy",
+    "mqtt": {
+        "enabled": False,
+        "host": "homeassistant.local",
+        "port": 1883,
+        "username": "",
+        "password": "",
+        "client_id": "rdc-proxy",
+        "base_topic": "rdc_proxy",
+        "discovery_prefix": "homeassistant",
+        "device_id": "",
+        "device_name": "Generator",
+        "retain": True,
+        "qos": 0,
+    },
     "gauges": {
         "battery_v": {"min": 10.0, "max": 16.0, "green": [12.0, 14.0], "yellow": [11.5, 14.5], "unit": "V", "label": "Battery Voltage"},
         "utility_v": {"min": 200, "max": 280, "green": [228, 252], "yellow": [216, 264], "unit": "V", "label": "Utility Voltage"},
@@ -134,6 +148,8 @@ def load_config(path):
         with open(path) as f:
             user = json.load(f)
         merged = {**DEFAULT_CONFIG, **user}
+        if "mqtt" in user:
+            merged["mqtt"] = {**DEFAULT_CONFIG["mqtt"], **user["mqtt"]}
         if "gauges" in user:
             merged["gauges"] = deep_merge_gauges(DEFAULT_CONFIG["gauges"], user["gauges"])
         if "stale_thresholds" in user:

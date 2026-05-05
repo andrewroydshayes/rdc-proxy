@@ -6,6 +6,7 @@ import threading
 
 from rdc_proxy.config import CFG, load_config
 from rdc_proxy.dashboard import collect_traffic
+from rdc_proxy.mqtt import start_mqtt_publisher
 from rdc_proxy.plugins import load_plugins
 from rdc_proxy.proxy import internet_monitor, start_server
 from rdc_proxy.state import STATE, have_handshake, load_handshake
@@ -28,6 +29,7 @@ async def main():
     print("[dashboard] traffic collector started", flush=True)
 
     load_plugins(STATE)
+    start_mqtt_publisher(CFG, STATE)
 
     asyncio.create_task(internet_monitor())
     await asyncio.sleep(2)

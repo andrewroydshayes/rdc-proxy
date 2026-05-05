@@ -43,6 +43,11 @@ class GeneratorState:
         self.oil_check_warned = False
         self._events = deque(maxlen=50)
         self._side_channels = {}
+        self._update_listeners = []
+
+    def add_update_listener(self, fn):
+        with self.lock:
+            self._update_listeners.append(fn)
 
     def set_cloud_check_result(self, ip_or_none):
         with self.lock:
@@ -80,6 +85,13 @@ class GeneratorState:
                     "ts": datetime.now().strftime("%H:%M:%S"),
                     "msg": f"Engine state: {prev_engine_mode} → {new_engine_mode}",
                 })
+            listeners = list(self._update_listeners)
+
+        for fn in listeners:
+            try:
+                fn(name, value, now)
+            except Exception as e:
+                print(f"[state] update listener failed: {e}", flush=True)
 
     def ingest_buffer(self, buf):
         for rid, name, value, units in parse_tlv_records(buf):

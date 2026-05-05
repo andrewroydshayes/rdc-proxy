@@ -65,3 +65,20 @@ def test_user_can_add_new_gauge(tmp_path):
     assert cfg["gauges"]["custom"] == {"label": "Custom", "unit": "X"}
     # Default gauges still present
     assert "battery_v" in cfg["gauges"]
+
+
+def test_mqtt_config_preserves_defaults_on_partial_override(tmp_path):
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({
+        "mqtt": {
+            "enabled": True,
+            "host": "mqtt.local",
+        }
+    }))
+    cfg = cfg_mod.load_config(str(p))
+    assert cfg["mqtt"]["enabled"] is True
+    assert cfg["mqtt"]["host"] == "mqtt.local"
+    assert cfg["mqtt"]["port"] == 1883
+    assert cfg["mqtt"]["base_topic"] == "rdc_proxy"
+    assert cfg["mqtt"]["device_id"] == ""
+    assert cfg["mqtt"]["device_name"] == "Generator"
