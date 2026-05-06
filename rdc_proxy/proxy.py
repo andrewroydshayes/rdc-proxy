@@ -291,6 +291,7 @@ async def local_mode(rdc_reader, rdc_writer):
 # ── Server bootstrap ───────────────────────────────────────────────────────
 
 async def start_server():
+    proxy_addr = CFG.get("proxy_listen_addr", "0.0.0.0")
     proxy_port = CFG.get("proxy_port", 5253)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -299,10 +300,10 @@ async def start_server():
         sock.setsockopt(socket.SOL_IP, IP_TRANSPARENT, 1)
     except OSError:
         print("[proxy] WARNING: IP_TRANSPARENT not available — TPROXY won't work", flush=True)
-    sock.bind(("0.0.0.0", proxy_port))
+    sock.bind((proxy_addr, proxy_port))
     sock.listen(32)
     sock.setblocking(False)
 
     server = await asyncio.start_server(handle_rdc_connection, sock=sock)
-    print(f"[proxy] listening on 0.0.0.0:{proxy_port} (TPROXY)", flush=True)
+    print(f"[proxy] listening on {proxy_addr}:{proxy_port} (TPROXY)", flush=True)
     return server

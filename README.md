@@ -85,6 +85,32 @@ External integrations live in separate packages that register under the
 `rdc_proxy.plugins` entry-point group. Install a plugin with pip after
 rdc-proxy is up — it's picked up automatically on next service restart.
 
+## MQTT / Home Assistant
+
+rdc-proxy can publish decoded telemetry to MQTT and advertise sensors through
+Home Assistant MQTT discovery. It is disabled by default. Add an `mqtt` block
+to `/etc/rdc-proxy/config.json` and restart the service:
+
+```json
+{
+  "mqtt": {
+    "enabled": true,
+    "host": "homeassistant.local",
+    "port": 1883,
+    "username": "mqtt-user",
+    "password": "mqtt-password",
+    "base_topic": "rdc_proxy",
+    "device_name": "Generator",
+    "discovery_prefix": "homeassistant"
+  }
+}
+```
+
+Each decoded field is retained at `rdc_proxy/<field>`, with discovery configs
+published under `homeassistant/sensor/<serial-number>/<field>/config` once the
+controller reports its serial number. Set `device_id` if you want a fixed
+discovery identifier instead of the serial number.
+
 ## Development
 
 ```bash

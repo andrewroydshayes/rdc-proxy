@@ -181,4 +181,9 @@ def api_config():
 
 
 def run_web():
-    app.run(host="0.0.0.0", port=CFG.get("web_port", 80), threaded=True, use_reloader=False)
+    app.run(
+        host=CFG.get("web_listen_addr", "0.0.0.0"),
+        port=CFG.get("web_port", 80),
+        threaded=True,
+        use_reloader=False,
+    )

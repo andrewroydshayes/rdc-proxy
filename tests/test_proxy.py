@@ -116,3 +116,20 @@ async def test_resolve_cloud_returns_empty_on_gaierror(monkeypatch):
     CFG.setdefault("cloud_dns", "devices.kohler.com")
     CFG.setdefault("cloud_port", 5253)
     assert proxy_mod.resolve_cloud() == []
+
+
+@pytest.mark.asyncio
+async def test_start_server_uses_configured_listen_address():
+    from rdc_proxy.config import CFG
+
+    CFG["proxy_listen_addr"] = "127.0.0.1"
+    CFG["proxy_port"] = 0
+
+    server = await proxy_mod.start_server()
+    try:
+        sock = server.sockets[0]
+        host, _port = sock.getsockname()[:2]
+        assert host == "127.0.0.1"
+    finally:
+        server.close()
+        await server.wait_closed()
