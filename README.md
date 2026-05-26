@@ -74,6 +74,18 @@ curl -fsSL https://raw.githubusercontent.com/andrewroydshayes/rdc-proxy/main/ins
   | sudo RDC_IP=10.0.0.50 bash
 ```
 
+## Diagnostics
+
+```bash
+sudo rdc-proxy doctor          # human-readable pass/fail report
+sudo rdc-proxy doctor --json   # same content, machine-readable
+```
+
+`doctor` is read-only. It checks the bridge, TPROXY plumbing, ebtables broute
+rule, listening port, generator reachability, and recent service traffic, and
+prints a fix hint for each failure. Exit code is 0 when everything passes,
+1 if any check failed.
+
 ## Architecture
 
 See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for module layout, the
