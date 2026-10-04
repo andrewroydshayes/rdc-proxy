@@ -215,3 +215,36 @@ def test_sticky_threshold_custom_field(fresh_state, isolated_cfg):
     fresh_state.update("customStickyField", "once")
     fresh_state.value_timestamps["customStickyField"] = time.time() - 99999
     assert fresh_state.snapshot()["values"]["customStickyField"] == "once"
+
+
+def test_generator_load_fields_pruned_in_standby(fresh_state, isolated_cfg):
+    fresh_state.update("utilityVoltageV", 240.0)
+    fresh_state.update("engineSpeedRpm", 0)
+    fresh_state.update("generatorLoadW", 5000.0)
+    fresh_state.update("generatorLoadPercent", 25)
+    fresh_state.update("generatorCurrentA", 20.8)
+
+    snap = fresh_state.snapshot()
+    assert snap["mode"] == "standby"
+    assert "generatorLoadW" not in snap["values"]
+    assert "generatorLoadPercent" not in snap["values"]
+    assert "generatorCurrentA" not in snap["values"]
+    assert snap["visibility"].get("generatorLoadW") is False
+    assert snap["visibility"].get("generatorLoadPercent") is False
+    assert snap["visibility"].get("generatorCurrentA") is False
+
+
+def test_generator_load_fields_visible_in_running(fresh_state, isolated_cfg):
+    fresh_state.update("utilityVoltageV", 0.0)
+    fresh_state.update("engineSpeedRpm", 3600)
+    fresh_state.update("generatorLoadW", 8500.0)
+    fresh_state.update("generatorLoadPercent", 42)
+    fresh_state.update("generatorCurrentA", 35.4)
+
+    snap = fresh_state.snapshot()
+    assert snap["mode"] == "running"
+    assert snap["values"]["generatorLoadW"] == 8500.0
+    assert snap["values"]["generatorLoadPercent"] == 42
+    assert snap["values"]["generatorCurrentA"] == 35.4
+    assert snap["visibility"].get("generatorLoadW", True) is not False
+

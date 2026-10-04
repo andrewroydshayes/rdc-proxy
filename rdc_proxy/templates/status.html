@@ -535,6 +535,15 @@
     <div class="gauge-chart" id="chart-util-hz"><canvas></canvas></div>
   </div>
 
+  <!-- Generator Electrical Load -->
+  <div class="card" id="load-card">
+    <h3>Generator Load</h3>
+    <div id="gauge-gen-load" class="gauge-linear nd-wrap"></div>
+    <div id="gauge-gen-pct" class="gauge-linear nd-wrap"></div>
+    <div id="gauge-gen-current" class="gauge-linear nd-wrap"></div>
+    <div class="gauge-chart" id="chart-gen-load"><canvas></canvas></div>
+  </div>
+
   <!-- Battery -->
   <div class="card">
     <h3>Battery</h3>
@@ -937,9 +946,9 @@ function closeSettings() { document.getElementById('settings-overlay').classList
 function renderGaugeTable(gauges) {
   const body = document.getElementById('gauge-table-body');
   body.innerHTML = '';
-  // Preferred display order: voltages, frequencies, battery, temps, rpm
-  const order = ['utility_v', 'generator_v', 'utility_hz', 'frequency_hz',
-                 'battery_v', 'controller_temp_f', 'oil_temp_f', 'rpm'];
+  // Preferred display order: voltages, frequencies, load, battery, temps, rpm
+  const order = ['utility_v', 'generator_v', 'generator_load_w', 'generator_load_pct', 'generator_current_a',
+                 'utility_hz', 'frequency_hz', 'battery_v', 'controller_temp_f', 'oil_temp_f', 'rpm'];
   const keys = order.filter(k => k in gauges).concat(
     Object.keys(gauges).filter(k => !order.includes(k))
   );
@@ -1123,6 +1132,7 @@ function showView(view) {
 const METRICS = [
   { id: 'util-v',     key: 'utilityVoltageV',     label: 'Utility Voltage',     unit: 'V',   color: '#3ddc84' },
   { id: 'util-hz',    key: 'utilityFrequencyHz',  label: 'Utility Frequency',   unit: 'Hz',  color: '#5b9cf6' },
+  { id: 'gen-load',   key: 'generatorLoadW',      label: 'Generator Load',      unit: 'W',   color: '#f6c75b' },
   { id: 'batt',       key: 'batteryVoltageV',     label: 'Battery',             unit: 'V',   color: '#e3a34c' },
   { id: 'ctrl-temp',  key: 'controllerTempF',     label: 'Controller Temp',     unit: '°F',  color: '#f6c75b', temp: true },
   { id: 'oil-temp',   key: 'oilTempF',            label: 'Oil Temp',            unit: '°F',  color: '#e05252', temp: true },
@@ -1258,6 +1268,7 @@ function renderLinearGauge(containerId, cfg, value, opts = {}) {
   const green = (cfg.green || [cfg.min, cfg.max]).map(conv);
   const yellow = (cfg.yellow || [cfg.min, cfg.max]).map(conv);
   const dispValue = value != null ? conv(value) : null;
+  const decimals = opts.decimals !== undefined ? opts.decimals : 1;
 
   const pct = v => Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100));
   const colorClass = (v) => {
@@ -1275,7 +1286,7 @@ function renderLinearGauge(containerId, cfg, value, opts = {}) {
   el.innerHTML = `
     <div class="gauge-label">
       <span class="name">${label}</span>
-      <span class="val ${dispValue != null ? colorClass(dispValue) : ''}">${dispValue != null ? dispValue.toFixed(1) : '—'} ${unit}</span>
+      <span class="val ${dispValue != null ? colorClass(dispValue) : ''}">${dispValue != null ? dispValue.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : '—'} ${unit}</span>
     </div>
     <div class="gauge-track">
       <div class="gauge-band band-red" style="left:0%;width:${pct(yellow[0])}%"></div>
@@ -1388,17 +1399,20 @@ function setNoData(id, missing) {
 // Map backing telemetry field → the DOM container that represents it on
 // the dashboard. Containers not in this map are unaffected by visibility.
 const FIELD_CONTAINERS = {
-  utilityVoltageV:     'gauge-util-v',
-  batteryVoltageV:     'gauge-batt',
-  controllerTempC:     'gauge-ctrl-temp',
-  lubeOilTempC:        'gauge-oil-temp',
-  utilityFrequencyHz:  'num-util-hz',
-  generatorVoltageV:   'gauge-gen-v',
-  engineFrequencyHz:   'num-gen-hz',
-  engineSpeedRpm:      'rpm-card',
-  totalOperationHours: 'row-total-op-hours',
-  totalRuntimeHours:   'row-total-rt-hours',
-  maintHoursSinceLast: 'row-maint-hours',
+  utilityVoltageV:      'gauge-util-v',
+  batteryVoltageV:      'gauge-batt',
+  controllerTempC:      'gauge-ctrl-temp',
+  lubeOilTempC:         'gauge-oil-temp',
+  utilityFrequencyHz:   'num-util-hz',
+  generatorVoltageV:    'gauge-gen-v',
+  engineFrequencyHz:    'num-gen-hz',
+  engineSpeedRpm:       'rpm-card',
+  generatorLoadW:       'gauge-gen-load',
+  generatorLoadPercent: 'gauge-gen-pct',
+  generatorCurrentA:    'gauge-gen-current',
+  totalOperationHours:  'row-total-op-hours',
+  totalRuntimeHours:    'row-total-rt-hours',
+  maintHoursSinceLast:  'row-maint-hours',
 };
 
 // Apply {field: bool} visibility from the snapshot. False → hide the
@@ -1412,6 +1426,19 @@ function applyFieldVisibility(vis) {
       el.style.display = 'none';
     } else {
       el.style.removeProperty('display');
+    }
+  }
+  const loadCard = document.getElementById('load-card');
+  if (loadCard) {
+    const loadGauges = ['gauge-gen-load', 'gauge-gen-pct', 'gauge-gen-current'];
+    const anyVisible = loadGauges.some(id => {
+      const el = document.getElementById(id);
+      return el && el.style.display !== 'none';
+    });
+    if (anyVisible) {
+      loadCard.style.removeProperty('display');
+    } else {
+      loadCard.style.display = 'none';
     }
   }
 }
@@ -1504,6 +1531,9 @@ async function poll() {
     applyFieldVisibility(vis);
 
     renderLinearGauge('gauge-gen-v', g.generator_v, v.generatorVoltageV);
+    renderLinearGauge('gauge-gen-load', g.generator_load_w, v.generatorLoadW, { decimals: 0 });
+    renderLinearGauge('gauge-gen-pct', g.generator_load_pct, v.generatorLoadPercent, { decimals: 0 });
+    renderLinearGauge('gauge-gen-current', g.generator_current_a, v.generatorCurrentA, { decimals: 1 });
 
     const rpm = v.engineSpeedRpm;
     setNoData('rpm-gauge-wrap', !hasValue(rpm));

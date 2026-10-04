@@ -7,7 +7,9 @@ Three modes (decided per RDC connection):
 """
 
 import asyncio
+import ipaddress
 import socket
+import struct
 import time
 
 from rdc_proxy.config import CFG
@@ -15,15 +17,6 @@ from rdc_proxy.state import HANDSHAKE, STATE, have_handshake, save_handshake
 
 
 # ── Internet & cloud reachability ──────────────────────────────────────────
-
-def check_internet():
-    try:
-        socket.setdefaulttimeout(3)
-        socket.create_connection(("8.8.8.8", 53), timeout=3).close()
-        return True
-    except OSError:
-        return False
-
 
 def resolve_cloud():
     try:
@@ -36,7 +29,7 @@ def resolve_cloud():
 
 
 def check_cloud_reachable():
-    for ip in resolve_cloud()[:3]:
+    for ip in resolve_cloud():
         try:
             s = socket.create_connection((ip, CFG["cloud_port"]), timeout=5)
             s.close()
@@ -46,18 +39,21 @@ def check_cloud_reachable():
     return None
 
 
+def check_internet():
+    return check_cloud_reachable() is not None
+
+
 async def internet_monitor():
     interval = CFG.get("internet_check_interval_s", 30)
     loop = asyncio.get_running_loop()
     while True:
-        # Run blocking probes in a thread so we don't stall handle_rdc_connection.
-        up = await loop.run_in_executor(None, check_internet)
+        cloud_ip = await loop.run_in_executor(None, check_cloud_reachable)
+        up = cloud_ip is not None
         STATE.internet_up = up
         if up:
             if STATE.internet_stable_since is None:
                 STATE.internet_stable_since = time.time()
                 print("[internet] connection detected, starting stability timer", flush=True)
-            cloud_ip = await loop.run_in_executor(None, check_cloud_reachable)
             STATE.set_cloud_check_result(cloud_ip)
         else:
             if STATE.internet_stable_since is not None:
@@ -68,6 +64,39 @@ async def internet_monitor():
 
 
 # ── TCP proxy primitives ───────────────────────────────────────────────────
+
+def is_private_or_local(ip):
+    if not ip:
+        return True
+    if ip in ("0.0.0.0", "127.0.0.1", "::1"):
+        return True
+    try:
+        addr = ipaddress.ip_address(ip)
+        return addr.is_private or addr.is_loopback
+    except ValueError:
+        return False
+
+
+def force_close_socket(writer):
+    """Forcefully reset TCP socket by sending a TCP RST."""
+    if not writer:
+        return
+    try:
+        sock = writer.get_extra_info("socket")
+        if sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            sock.close()
+    except Exception:
+        pass
+    try:
+        writer.close()
+    except Exception:
+        pass
+
 
 async def read_exactly(reader, n, timeout=30):
     data = b""
@@ -100,21 +129,6 @@ async def forward_and_tap(src_reader, dst_writer, tap_fn, label=""):
 
 # ── Connection lifecycle / mode dispatch ───────────────────────────────────
 
-def _local_ips():
-    """Best-effort set of this host's own IPs (for detecting non-TPROXY connects)."""
-    ips = {"0.0.0.0", "127.0.0.1", "::1"}
-    try:
-        import socket as _s
-        for info in _s.getaddrinfo(_s.gethostname(), None):
-            ips.add(info[4][0])
-    except Exception:
-        pass
-    return ips
-
-
-_LOCAL_IPS = _local_ips()
-
-
 async def handle_rdc_connection(rdc_reader, rdc_writer):
     peer = rdc_writer.get_extra_info("peername")
     sock = rdc_writer.get_extra_info("socket")
@@ -122,9 +136,11 @@ async def handle_rdc_connection(rdc_reader, rdc_writer):
     orig_dst = None
     if sock:
         try:
-            orig_dst = sock.getsockname()
-            if orig_dst[0] in _LOCAL_IPS:
-                orig_dst = None  # non-TPROXY connect to us directly
+            raw_dst = sock.getsockname()
+            # If the destination address is a private/local RFC1918 address (due to router NAT port forward),
+            # it is NOT a public cloud IP. We discard it so we always connect to the real public cloud IP.
+            if not is_private_or_local(raw_dst[0]):
+                orig_dst = raw_dst
         except Exception:
             pass
 
@@ -134,38 +150,47 @@ async def handle_rdc_connection(rdc_reader, rdc_writer):
         flush=True,
     )
     STATE.rdc_connected = True
+    loop = asyncio.get_running_loop()
 
     try:
-        stable_threshold = CFG.get("internet_stable_before_proxy_s", 300)
-        internet_stable = (
+        # Determine if internet has met the stability threshold
+        stable_threshold = CFG.get("internet_stable_before_proxy_s", 180)
+        is_internet_stable = (
             STATE.internet_up
             and STATE.internet_stable_since is not None
             and (time.time() - STATE.internet_stable_since) >= stable_threshold
         )
 
-        if internet_stable:
-            cloud_ip = orig_dst[0] if orig_dst else check_cloud_reachable()
-            cloud_port = orig_dst[1] if orig_dst else None
-            if cloud_ip:
-                await proxy_mode(rdc_reader, rdc_writer, cloud_ip, cloud_port)
-                return
+        cloud_ip = orig_dst[0] if orig_dst else await loop.run_in_executor(None, check_cloud_reachable)
+        cloud_port = orig_dst[1] if orig_dst else CFG.get("cloud_port", 5253)
+
+        # If we have a handshake and internet is not yet stable, serve initial connection locally!
+        if have_handshake() and not (is_internet_stable and cloud_ip):
+            await local_mode(rdc_reader, rdc_writer)
+            return
+
+        # Once internet is stable and cloud is reachable, connect in PROXY mode:
+        if cloud_ip and is_internet_stable:
+            await proxy_mode(rdc_reader, rdc_writer, cloud_ip, cloud_port)
+            return
 
         if have_handshake():
             await local_mode(rdc_reader, rdc_writer)
         else:
             STATE.set_proxy_mode("waiting")
-            print("[proxy] no handshake + no stable internet — WAITING mode", flush=True)
+            print("[proxy] no handshake + no cloud — WAITING mode", flush=True)
             while not STATE.internet_up:
                 await asyncio.sleep(5)
-            cloud_ip = check_cloud_reachable()
+            cloud_ip = await loop.run_in_executor(None, check_cloud_reachable)
             if cloud_ip:
-                await proxy_mode(rdc_reader, rdc_writer, cloud_ip)
+                await proxy_mode(rdc_reader, rdc_writer, cloud_ip, CFG.get("cloud_port", 5253))
             else:
                 print("[proxy] cloud unreachable despite internet — closing", flush=True)
-                rdc_writer.close()
+                force_close_socket(rdc_writer)
     finally:
         STATE.rdc_connected = False
         STATE.cloud_connected = False
+        force_close_socket(rdc_writer)
         print("[proxy] RDC connection ended", flush=True)
 
 
@@ -243,6 +268,7 @@ async def proxy_mode(rdc_reader, rdc_writer, cloud_ip, cloud_port=None):
             await cloud_writer.wait_closed()
         except Exception:
             pass
+        force_close_socket(rdc_writer)
         if not STATE.internet_up and have_handshake():
             print("[proxy] internet lost during proxy — will serve locally on reconnect", flush=True)
 
@@ -267,6 +293,7 @@ async def local_mode(rdc_reader, rdc_writer):
         print("[proxy] local handshake complete — ingesting telemetry", flush=True)
 
         stable_threshold = CFG.get("internet_stable_before_proxy_s", 300)
+        loop = asyncio.get_running_loop()
         while True:
             data = await rdc_reader.read(8192)
             if not data:
@@ -277,15 +304,18 @@ async def local_mode(rdc_reader, rdc_writer):
                 and STATE.internet_stable_since
                 and (time.time() - STATE.internet_stable_since) >= stable_threshold
             ):
-                cloud_ip = check_cloud_reachable()
+                cloud_ip = await loop.run_in_executor(None, check_cloud_reachable)
                 if cloud_ip:
-                    print("[proxy] internet stable + cloud reachable — terminating local session for proxy switchover", flush=True)
+                    print("[proxy] internet stable + cloud reachable — resetting local session for proxy switchover", flush=True)
+                    force_close_socket(rdc_writer)
                     break
 
     except (ConnectionError, asyncio.CancelledError):
         pass
     except Exception as e:
         print(f"[proxy] local_mode error: {e}", flush=True)
+    finally:
+        force_close_socket(rdc_writer)
 
 
 # ── Server bootstrap ───────────────────────────────────────────────────────

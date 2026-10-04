@@ -106,7 +106,11 @@ class GeneratorState:
             return {k: dict(v) for k, v in self._side_channels.items()}
 
     def _display_mode(self):
-        rpm = self.values.get("engineSpeedRpm", 0) or 0
+        rpm_ts = self.value_timestamps.get("engineSpeedRpm")
+        if rpm_ts and (time.time() - rpm_ts <= 15):
+            rpm = self.values.get("engineSpeedRpm", 0) or 0
+        else:
+            rpm = 0
         util_v = self.values.get("utilityVoltageV", 0) or 0
         if rpm > 100 and util_v < 10:
             return "running"
